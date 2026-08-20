@@ -1,0 +1,6 @@
+{
+  "name": "마그넷 보드 분류 및 일정 대시보드",
+  "description": "자유로운 드래그앤드롭 모형 배치, 개인별 작업 이력 및 배정 일정 확인, 마크다운 로컬 백업 및 불러오기를 지원하는 반응형 화이트보드 대시보드",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
