@@ -1,27 +1,57 @@
-import React, { useState, useRef } from 'react';
-import { MagnetToken, MagnetStatus } from '../types';
-import { Edit2, Trash2, Calendar, Phone, MoreHorizontal, CheckCircle2, Clock, AlertCircle } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { MagnetToken, MagnetStatus, SiteSettings } from '../types';
+import { getTokenSizePx, getTokenWidthPx } from '../utils/layout';
+import { Edit2, Trash2, Calendar, Phone } from 'lucide-react';
 
 interface MagnetTokenProps {
   token: MagnetToken;
+  /** 드래그 중 실시간 미리보기 좌표 / 크기 (없으면 저장된 값 사용) */
+  previewX?: number;
+  previewY?: number;
+  previewSizePx?: number;
   isSelected: boolean;
   isDragging: boolean;
-  scale: number;
+  isResizing: boolean;
+  isFocused: boolean;
+  /** 검색어와 일치하는 모형 */
+  isSearchMatch: boolean;
+  /** 검색 중이지만 일치하지 않는 모형 */
+  isSearchDimmed: boolean;
+  searchHighlight: SiteSettings['searchHighlight'];
+  showStatusDot: boolean;
+  showSubtitle: boolean;
   onPointerDown: (e: React.PointerEvent, token: MagnetToken) => void;
-  onClick: (token: MagnetToken) => void;
+  onResizePointerDown: (e: React.PointerEvent, token: MagnetToken) => void;
   onEdit: (token: MagnetToken) => void;
   onDelete: (tokenId: string) => void;
   onViewSchedule: (token: MagnetToken) => void;
   onQuickStatusChange: (tokenId: string, status: MagnetStatus) => void;
 }
 
+const STATUS_COLORS: Record<MagnetStatus, { bg: string; label: string }> = {
+  active: { bg: '#22c55e', label: '작업중' },
+  assigned: { bg: '#3b82f6', label: '배정됨' },
+  waiting: { bg: '#f59e0b', label: '현장대기' },
+  break: { bg: '#a855f7', label: '휴식' },
+  done: { bg: '#64748b', label: '완료' }
+};
+
 export const MagnetTokenComponent: React.FC<MagnetTokenProps> = ({
   token,
+  previewX,
+  previewY,
+  previewSizePx,
   isSelected,
   isDragging,
-  scale,
+  isResizing,
+  isFocused,
+  isSearchMatch,
+  isSearchDimmed,
+  searchHighlight,
+  showStatusDot,
+  showSubtitle,
   onPointerDown,
-  onClick,
+  onResizePointerDown,
   onEdit,
   onDelete,
   onViewSchedule,
@@ -30,40 +60,48 @@ export const MagnetTokenComponent: React.FC<MagnetTokenProps> = ({
   const [showMenu, setShowMenu] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
-  // Size mapping (in pixels)
-  const sizeDimensions: Record<string, { size: number; textClass: string; subTextClass: string }> = {
-    sm: { size: 50, textClass: 'text-sm font-bold', subTextClass: 'text-[9px]' },
-    md: { size: 66, textClass: 'text-base font-bold', subTextClass: 'text-[10px]' },
-    lg: { size: 82, textClass: 'text-lg font-extrabold', subTextClass: 'text-xs' },
-    xl: { size: 98, textClass: 'text-xl font-black', subTextClass: 'text-xs' }
-  };
+  // 메뉴 바깥을 누르거나 ESC 를 누르면 닫기
+  useEffect(() => {
+    if (!showMenu) return;
+    const handlePointerDown = (e: PointerEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setShowMenu(false);
+      }
+    };
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setShowMenu(false);
+    };
+    window.addEventListener('pointerdown', handlePointerDown);
+    window.addEventListener('keydown', handleKey);
+    return () => {
+      window.removeEventListener('pointerdown', handlePointerDown);
+      window.removeEventListener('keydown', handleKey);
+    };
+  }, [showMenu]);
 
-  const dim = sizeDimensions[token.size] || sizeDimensions.md;
+  const sizePx = previewSizePx ?? getTokenSizePx(token);
+  const widthPx = previewSizePx
+    ? getTokenWidthPx({ ...token, sizePx: previewSizePx })
+    : getTokenWidthPx(token);
 
-  // Status color dot
-  const statusColors: Record<MagnetStatus, { bg: string; border: string; label: string }> = {
-    active: { bg: '#22c55e', border: '#16a34a', label: '작업중' },
-    assigned: { bg: '#3b82f6', border: '#2563eb', label: '배정됨' },
-    waiting: { bg: '#f59e0b', border: '#d97706', label: '현장대기' },
-    break: { bg: '#a855f7', border: '#9333ea', label: '휴식' },
-    done: { bg: '#64748b', border: '#475569', label: '완료' }
-  };
+  // 크기에 맞춰 글자 크기를 자동 조절
+  const titleClass =
+    sizePx < 54 ? 'text-xs' : sizePx < 70 ? 'text-sm' : sizePx < 88 ? 'text-base' : 'text-lg';
+  const subtitleClass = sizePx < 60 ? 'text-[8px]' : sizePx < 80 ? 'text-[10px]' : 'text-[11px]';
 
-  const currentStatus = statusColors[token.status] || statusColors.assigned;
+  const currentStatus = STATUS_COLORS[token.status] || STATUS_COLORS.assigned;
 
-  // Shape class generator
   const getShapeStyle = () => {
     switch (token.shape) {
-      case 'circle':
-        return 'rounded-full';
       case 'rounded-rect':
-        return 'rounded-2xl aspect-[1.3/1] px-2';
+        return 'rounded-2xl px-2';
       case 'hexagon':
-        return 'rounded-xl aspect-square [clip-path:polygon(50%_0%,_100%_25%,_100%_75%,_50%_100%,_0%_75%,_0%_25%)]';
+        return 'rounded-xl [clip-path:polygon(50%_0%,_100%_25%,_100%_75%,_50%_100%,_0%_75%,_0%_25%)]';
       case 'pill':
-        return 'rounded-full aspect-[1.5/1] px-3';
+        return 'rounded-full px-3';
       case 'square':
-        return 'rounded-xl aspect-square';
+        return 'rounded-xl';
+      case 'circle':
       default:
         return 'rounded-full';
     }
@@ -72,88 +110,129 @@ export const MagnetTokenComponent: React.FC<MagnetTokenProps> = ({
   const getFontFamilyClass = () => {
     switch (token.fontStyle) {
       case 'handwriting':
-        return 'font-handwriting tracking-wide text-stone-900';
+        return 'font-handwriting tracking-wide';
       case 'dodum':
-        return 'font-dodum tracking-tight text-stone-900';
+        return 'font-dodum tracking-tight';
       default:
-        return 'font-sans font-bold text-stone-900';
+        return 'font-sans font-bold';
     }
   };
+
+  const searchClass = isSearchMatch
+    ? searchHighlight === 'bounce'
+      ? 'search-hit-bounce'
+      : searchHighlight === 'glow'
+      ? 'search-hit-glow'
+      : 'search-hit-pulse'
+    : '';
+
+  const showHandles = isSelected || isFocused;
 
   return (
     <div
       id={`magnet-${token.id}`}
       style={{
-        left: `${token.x}%`,
-        top: `${token.y}%`,
-        transform: `translate(-50%, -50%) scale(${isDragging ? 1.12 : 1})`,
-        zIndex: isDragging ? 50 : isSelected ? 40 : 20,
+        left: `${previewX ?? token.x}%`,
+        top: `${previewY ?? token.y}%`,
+        transform: `translate(-50%, -50%) scale(${isDragging ? 1.1 : 1})`,
+        zIndex: isDragging || isResizing ? 50 : isSearchMatch ? 46 : isFocused ? 45 : isSelected ? 40 : 20,
+        opacity: isSearchDimmed ? 0.4 : 1,
         touchAction: 'none'
       }}
-      className={`absolute select-none cursor-grab active:cursor-grabbing transition-transform duration-75 group ${
-        isDragging ? 'opacity-90' : ''
+      className={`absolute select-none cursor-grab active:cursor-grabbing group ${
+        isDragging || isResizing ? '' : 'transition-all duration-100'
       }`}
       onPointerDown={(e) => onPointerDown(e, token)}
       onClick={(e) => {
         e.stopPropagation();
-        onClick(token);
+      }}
+      onDoubleClick={(e) => {
+        e.stopPropagation();
+        onEdit(token);
       }}
       onContextMenu={(e) => {
         e.preventDefault();
         e.stopPropagation();
-        setShowMenu(prev => !prev);
+        setShowMenu((prev) => !prev);
       }}
     >
-      {/* 3D Magnet Body with realistic specular reflection */}
+      {/* 자석 본체 */}
       <div
         style={{
-          width: token.shape === 'rounded-rect' || token.shape === 'pill' ? `${dim.size * 1.3}px` : `${dim.size}px`,
-          height: `${dim.size}px`,
+          width: `${widthPx}px`,
+          height: `${sizePx}px`,
           backgroundColor: token.color,
           color: token.textColor || '#1c1917',
           borderColor: token.borderColor || 'rgba(0, 0, 0, 0.12)'
         }}
         className={`relative flex flex-col items-center justify-center border-2 border-stone-300/60 shadow-md ${
           isDragging ? 'magnet-shadow-active' : 'magnet-shadow'
-        } ${getShapeStyle()} transition-all overflow-hidden`}
+        } ${getShapeStyle()} ${searchClass} overflow-hidden`}
       >
-        {/* Subtle glossy top-light gradient reflection */}
+        {/* 광택 */}
         <div className="absolute inset-0 bg-gradient-to-b from-white/45 via-transparent to-black/10 pointer-events-none" />
-
-        {/* Small top pin highlight */}
         <div className="absolute top-1.5 w-1/3 h-1 bg-white/60 rounded-full blur-[0.5px] pointer-events-none" />
 
-        {/* Status indicator dot */}
-        <div
-          title={`상태: ${currentStatus.label}`}
-          style={{ backgroundColor: currentStatus.bg }}
-          className="absolute top-1 right-1.5 w-2.5 h-2.5 rounded-full border border-white/90 shadow-xs z-10"
-        />
+        {/* 상태 표시점 */}
+        {showStatusDot && (
+          <div
+            title={`상태: ${currentStatus.label}`}
+            style={{ backgroundColor: currentStatus.bg }}
+            className="absolute top-1 right-1.5 w-2.5 h-2.5 rounded-full border border-white/90 shadow-xs z-10"
+          />
+        )}
 
-        {/* Main Content (Title / Name) */}
+        {/* 이름 / 부제목 */}
         <div className="relative z-10 flex flex-col items-center text-center px-1 max-w-full">
           <span
-            className={`${dim.textClass} ${getFontFamilyClass()} leading-tight drop-shadow-[0_0.5px_0.5px_rgba(255,255,255,0.8)] truncate max-w-[85px]`}
+            style={{ maxWidth: `${widthPx - 8}px` }}
+            className={`${titleClass} ${getFontFamilyClass()} font-bold leading-tight drop-shadow-[0_0.5px_0.5px_rgba(255,255,255,0.8)] truncate`}
           >
             {token.title}
           </span>
-          {token.subtitle && (
-            <span className={`${dim.subTextClass} font-medium text-stone-700/90 leading-none mt-0.5 truncate max-w-[80px]`}>
+          {showSubtitle && token.subtitle && sizePx >= 52 && (
+            <span
+              style={{ maxWidth: `${widthPx - 10}px` }}
+              className={`${subtitleClass} font-medium opacity-80 leading-none mt-0.5 truncate`}
+            >
               {token.subtitle}
             </span>
           )}
         </div>
-
-        {/* Selection Ring */}
-        {isSelected && (
-          <div className={`absolute -inset-1 border-2 border-blue-500 ring-2 ring-blue-300/60 ${getShapeStyle()} animate-pulse pointer-events-none`} />
-        )}
       </div>
 
-      {/* Quick Hover Action Trigger (Visible on hover on desktop or touch tap) */}
-      <div className="absolute -bottom-6 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 bg-stone-900/85 backdrop-blur-xs text-white px-2 py-0.5 rounded-full text-[11px] shadow-lg pointer-events-auto z-30 whitespace-nowrap">
+      {/* 포커스(위치 확인) 강조 링 */}
+      {isFocused && (
+        <div className="absolute -inset-2 rounded-full border-4 border-amber-400 ring-4 ring-amber-300/50 animate-pulse pointer-events-none" />
+      )}
+
+      {/* 선택 링 */}
+      {isSelected && !isFocused && (
+        <div className="absolute -inset-1.5 rounded-full border-2 border-blue-500 ring-2 ring-blue-300/60 pointer-events-none" />
+      )}
+
+      {/* 크기 조절 손잡이 (선택했거나 마우스를 올렸을 때) */}
+      <div
+        onPointerDown={(e) => onResizePointerDown(e, token)}
+        style={{ cursor: 'nwse-resize' }}
+        className={`absolute -right-1.5 -bottom-1.5 w-4 h-4 rounded-full bg-white border-2 border-blue-500 shadow-md z-40 touch-none transition-opacity ${
+          showHandles || isResizing ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+        }`}
+        title="드래그하여 모형 크기 조절"
+      />
+
+      {/* 크기 조절 중 실시간 수치 */}
+      {isResizing && (
+        <div className="absolute -top-7 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded-md bg-stone-900 text-white text-[10px] font-mono shadow-lg whitespace-nowrap pointer-events-none">
+          {Math.round(sizePx)}px
+        </div>
+      )}
+
+      {/* 호버 퀵 액션 */}
+      <div className="absolute -bottom-7 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 bg-stone-900/85 backdrop-blur-xs text-white px-2 py-0.5 rounded-full text-[11px] shadow-lg pointer-events-auto z-30 whitespace-nowrap">
         <button
           type="button"
+          onPointerDown={(e) => e.stopPropagation()}
           onClick={(e) => {
             e.stopPropagation();
             onEdit(token);
@@ -166,6 +245,7 @@ export const MagnetTokenComponent: React.FC<MagnetTokenProps> = ({
         <span className="text-stone-500">|</span>
         <button
           type="button"
+          onPointerDown={(e) => e.stopPropagation()}
           onClick={(e) => {
             e.stopPropagation();
             onViewSchedule(token);
@@ -178,29 +258,32 @@ export const MagnetTokenComponent: React.FC<MagnetTokenProps> = ({
         <span className="text-stone-500">|</span>
         <button
           type="button"
+          onPointerDown={(e) => e.stopPropagation()}
           onClick={(e) => {
             e.stopPropagation();
             onDelete(token.id);
           }}
           className="hover:text-rose-400 p-0.5 transition-colors"
-          title="삭제"
+          title="삭제 (Ctrl+Z 로 되돌리기 가능)"
         >
           <Trash2 className="w-3 h-3" />
         </button>
       </div>
 
-      {/* Popover Context Menu */}
+      {/* 우클릭 메뉴 */}
       {showMenu && (
         <div
           ref={menuRef}
-          className="absolute top-full left-1/2 -translate-x-1/2 mt-2 w-48 bg-white rounded-xl shadow-2xl border border-stone-200 p-2 z-50 text-stone-800 animate-in fade-in zoom-in-95 duration-100"
+          className="absolute top-full left-1/2 -translate-x-1/2 mt-2 w-52 bg-white rounded-xl shadow-2xl border border-stone-200 p-2 z-50 text-stone-800 animate-in fade-in zoom-in-95 duration-100"
+          onPointerDown={(e) => e.stopPropagation()}
           onClick={(e) => e.stopPropagation()}
         >
-          <div className="text-xs font-semibold px-2 py-1 border-b border-stone-100 flex items-center justify-between">
-            <span className="truncate">{token.title} 모형 메뉴</span>
+          <div className="text-xs font-semibold px-2 py-1 border-b border-stone-100 flex items-center justify-between gap-2">
+            <span className="truncate whitespace-nowrap">{token.title} 모형 메뉴</span>
             <button
+              type="button"
               onClick={() => setShowMenu(false)}
-              className="text-stone-400 hover:text-stone-600 text-xs"
+              className="text-stone-400 hover:text-stone-600 text-xs shrink-0"
             >
               ✕
             </button>
@@ -208,33 +291,35 @@ export const MagnetTokenComponent: React.FC<MagnetTokenProps> = ({
 
           <div className="py-1 space-y-0.5">
             <button
+              type="button"
               onClick={() => {
                 setShowMenu(false);
                 onEdit(token);
               }}
-              className="w-full text-left px-2 py-1.5 rounded-lg text-xs hover:bg-stone-100 flex items-center gap-2"
+              className="w-full text-left px-2 py-1.5 rounded-lg text-xs hover:bg-stone-100 flex items-center gap-2 whitespace-nowrap"
             >
-              <Edit2 className="w-3.5 h-3.5 text-stone-500" />
-              <span>모형 속성 편집 (색상/형태/크기)</span>
+              <Edit2 className="w-3.5 h-3.5 text-stone-500 shrink-0" />
+              <span>모형 속성 편집</span>
             </button>
 
             <button
+              type="button"
               onClick={() => {
                 setShowMenu(false);
                 onViewSchedule(token);
               }}
-              className="w-full text-left px-2 py-1.5 rounded-lg text-xs hover:bg-stone-100 flex items-center gap-2"
+              className="w-full text-left px-2 py-1.5 rounded-lg text-xs hover:bg-stone-100 flex items-center gap-2 whitespace-nowrap"
             >
-              <Calendar className="w-3.5 h-3.5 text-blue-500" />
-              <span>배정 일정 & 작업 이력</span>
+              <Calendar className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+              <span>배정 일정 &amp; 작업 이력</span>
             </button>
 
             {token.phone && (
               <a
                 href={`tel:${token.phone}`}
-                className="w-full text-left px-2 py-1.5 rounded-lg text-xs hover:bg-stone-100 flex items-center gap-2 text-stone-700"
+                className="w-full text-left px-2 py-1.5 rounded-lg text-xs hover:bg-stone-100 flex items-center gap-2 text-stone-700 whitespace-nowrap"
               >
-                <Phone className="w-3.5 h-3.5 text-green-600" />
+                <Phone className="w-3.5 h-3.5 text-green-600 shrink-0" />
                 <span>전화 걸기 ({token.phone})</span>
               </a>
             )}
@@ -242,59 +327,44 @@ export const MagnetTokenComponent: React.FC<MagnetTokenProps> = ({
             <div className="pt-1 border-t border-stone-100">
               <div className="text-[10px] text-stone-400 px-2 py-0.5">상태 빠른 변경</div>
               <div className="grid grid-cols-2 gap-1 px-1 pt-1">
-                <button
-                  onClick={() => {
-                    onQuickStatusChange(token.id, 'active');
-                    setShowMenu(false);
-                  }}
-                  className="px-1.5 py-1 text-[11px] bg-green-50 text-green-700 rounded hover:bg-green-100 flex items-center gap-1"
-                >
-                  <span className="w-2 h-2 rounded-full bg-green-500 inline-block" />
-                  작업중
-                </button>
-                <button
-                  onClick={() => {
-                    onQuickStatusChange(token.id, 'waiting');
-                    setShowMenu(false);
-                  }}
-                  className="px-1.5 py-1 text-[11px] bg-amber-50 text-amber-700 rounded hover:bg-amber-100 flex items-center gap-1"
-                >
-                  <span className="w-2 h-2 rounded-full bg-amber-500 inline-block" />
-                  대기
-                </button>
-                <button
-                  onClick={() => {
-                    onQuickStatusChange(token.id, 'assigned');
-                    setShowMenu(false);
-                  }}
-                  className="px-1.5 py-1 text-[11px] bg-blue-50 text-blue-700 rounded hover:bg-blue-100 flex items-center gap-1"
-                >
-                  <span className="w-2 h-2 rounded-full bg-blue-500 inline-block" />
-                  배정
-                </button>
-                <button
-                  onClick={() => {
-                    onQuickStatusChange(token.id, 'done');
-                    setShowMenu(false);
-                  }}
-                  className="px-1.5 py-1 text-[11px] bg-stone-100 text-stone-700 rounded hover:bg-stone-200 flex items-center gap-1"
-                >
-                  <span className="w-2 h-2 rounded-full bg-stone-500 inline-block" />
-                  완료
-                </button>
+                {(
+                  [
+                    ['active', '작업중', 'bg-green-50 text-green-700 hover:bg-green-100', '#22c55e'],
+                    ['waiting', '대기', 'bg-amber-50 text-amber-700 hover:bg-amber-100', '#f59e0b'],
+                    ['assigned', '배정', 'bg-blue-50 text-blue-700 hover:bg-blue-100', '#3b82f6'],
+                    ['done', '완료', 'bg-stone-100 text-stone-700 hover:bg-stone-200', '#64748b']
+                  ] as const
+                ).map(([status, label, cls, dot]) => (
+                  <button
+                    key={status}
+                    type="button"
+                    onClick={() => {
+                      onQuickStatusChange(token.id, status as MagnetStatus);
+                      setShowMenu(false);
+                    }}
+                    className={`px-1.5 py-1 text-[11px] rounded flex items-center gap-1 whitespace-nowrap ${cls}`}
+                  >
+                    <span
+                      style={{ backgroundColor: dot }}
+                      className="w-2 h-2 rounded-full inline-block shrink-0"
+                    />
+                    {label}
+                  </button>
+                ))}
               </div>
             </div>
 
             <div className="pt-1 border-t border-stone-100">
               <button
+                type="button"
                 onClick={() => {
                   setShowMenu(false);
                   onDelete(token.id);
                 }}
-                className="w-full text-left px-2 py-1.5 rounded-lg text-xs text-rose-600 hover:bg-rose-50 flex items-center gap-2"
+                className="w-full text-left px-2 py-1.5 rounded-lg text-xs text-rose-600 hover:bg-rose-50 flex items-center gap-2 whitespace-nowrap"
               >
-                <Trash2 className="w-3.5 h-3.5" />
-                <span>모형 삭제</span>
+                <Trash2 className="w-3.5 h-3.5 shrink-0" />
+                <span>모형 삭제 (Ctrl+Z 되돌리기)</span>
               </button>
             </div>
           </div>

@@ -16,6 +16,8 @@ export interface MagnetToken {
   textColor: string;
   borderColor?: string;
   size: MagnetSize;
+  /** 가장자리 드래그로 조절한 실제 지름(px). 없으면 size 프리셋을 따른다. */
+  sizePx?: number;
   x: number; // percentage (0 - 100) or px based on canvas
   y: number; // percentage (0 - 100) or px based on canvas
   zoneId?: string;
@@ -81,6 +83,55 @@ export interface UserAccount {
   avatarColor: string;
   assignedMagnetId?: string;
   department?: string;
+  /** 로그인 아이디 (마스터 계정은 'admin') */
+  loginId?: string;
+  /** 로그인 비밀번호 (로컬 전용 데모 계정 체계) */
+  password?: string;
+  /** 마스터(관리자) 계정 여부 - 계정 추가/삭제 권한 */
+  isMaster?: boolean;
+}
+
+/** 화면에 그려진 보드의 실제 픽셀 크기 (퍼센트 <-> 픽셀 변환용) */
+export interface BoardMetrics {
+  width: number;
+  height: number;
+}
+
+/** 저장된 배치표 스냅샷 */
+export interface BoardSnapshot {
+  id: string;
+  name: string;
+  savedAt: string;
+  savedBy: string;
+  tokenCount: number;
+  zoneCount: number;
+  state: BoardState;
+}
+
+/** 사이트 전반 설정 (설정 관리 창에서 변경) */
+export interface SiteSettings {
+  dashboardTitle: string;
+  companyName: string;
+  rosterTitle: string;
+  showGrid: boolean;
+  showZoneCapacity: boolean;
+  showZoneSubtitle: boolean;
+  showStatusDot: boolean;
+  showTokenSubtitle: boolean;
+  searchHighlight: 'pulse' | 'bounce' | 'glow';
+  defaultMagnetSize: MagnetSize;
+  defaultMagnetColor: string;
+  defaultFontStyle: MagnetFontStyle;
+  confirmOnDelete: boolean;
+  keepInsideZone: boolean;
+}
+
+/** 구역의 위치/크기 (보드 대비 % 단위) */
+export interface ZoneRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
 }
 
 export interface BoardState {

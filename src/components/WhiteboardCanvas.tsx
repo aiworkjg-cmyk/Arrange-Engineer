@@ -1,17 +1,23 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { MagnetToken, BoardZone, MagnetStatus, UserAccount } from '../types';
+import { MagnetToken, BoardZone, MagnetStatus, ZoneRect, BoardMetrics, SiteSettings } from '../types';
 import { MagnetTokenComponent } from './MagnetToken';
-import { ZoneCardComponent } from './ZoneCard';
-import { ZoomIn, ZoomOut, Maximize2, Grid, RotateCcw, Sparkles, Layers, Move, Plus } from 'lucide-react';
+import { ZoneCardComponent, ZoneResizeHandle } from './ZoneCard';
+import { getTokenSizePx, MIN_TOKEN_PX, MAX_TOKEN_PX } from '../utils/layout';
+import { Plus, Layout, MousePointer2, Search, ListChecks } from 'lucide-react';
 
 interface WhiteboardCanvasProps {
   tokens: MagnetToken[];
   zones: BoardZone[];
-  activeUser: UserAccount;
-  selectedTokenId: string | null;
+  settings: SiteSettings;
+  selectedTokenIds: string[];
+  focusTokenId: string | null;
   searchFilter: string;
   onUpdateTokenPosition: (tokenId: string, x: number, y: number, newZoneId?: string) => void;
-  onSelectToken: (token: MagnetToken | null) => void;
+  onUpdateTokenSize: (tokenId: string, sizePx: number) => void;
+  onUpdateZoneRect: (zoneId: string, rect: ZoneRect, mode: 'move' | 'resize') => void;
+  onBoardMetricsChange: (metrics: BoardMetrics) => void;
+  onSelectToken: (token: MagnetToken | null, additive?: boolean) => void;
+  onSelectTokenIds: (tokenIds: string[]) => void;
   onEditToken: (token: MagnetToken) => void;
   onDeleteToken: (tokenId: string) => void;
   onViewSchedule: (token: MagnetToken) => void;
@@ -21,16 +27,89 @@ interface WhiteboardCanvasProps {
   onAutoArrangeZone: (zoneId: string) => void;
   onOpenRosterSheet: () => void;
   onAddNewMagnet: () => void;
+  onOpenMagnetManager: () => void;
+  onAddNewZone: () => void;
+  onFocusHandled: () => void;
 }
+
+/** 보드 좌표계는 모두 보드 프레임 대비 % 이다. */
+const MIN_ZONE_WIDTH = 10;
+const MIN_ZONE_HEIGHT = 12;
+const TOKEN_MARGIN = 3;
+const DRAG_THRESHOLD_PX = 3;
+
+type DragSession =
+  | {
+      kind: 'token-move';
+      id: string;
+      pointerId: number;
+      originClientX: number;
+      originClientY: number;
+      startX: number;
+      startY: number;
+    }
+  | {
+      kind: 'token-resize';
+      id: string;
+      pointerId: number;
+      originClientX: number;
+      originClientY: number;
+      startSizePx: number;
+    }
+  | {
+      kind: 'zone-move';
+      id: string;
+      pointerId: number;
+      originClientX: number;
+      originClientY: number;
+      startRect: ZoneRect;
+    }
+  | {
+      kind: 'zone-resize';
+      id: string;
+      handle: ZoneResizeHandle;
+      pointerId: number;
+      originClientX: number;
+      originClientY: number;
+      startRect: ZoneRect;
+    };
+
+type DragPreview =
+  | { kind: 'token-move'; id: string; x: number; y: number; moved: boolean }
+  | { kind: 'token-resize'; id: string; sizePx: number }
+  | { kind: 'zone'; id: string; rect: ZoneRect; moved: boolean };
+
+interface SelectionSession {
+  pointerId: number;
+  originClientX: number;
+  originClientY: number;
+  additive: boolean;
+  initialSelection: string[];
+}
+
+interface SelectionBox {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
+const round1 = (n: number) => Number(n.toFixed(1));
+const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n));
 
 export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
   tokens,
   zones,
-  activeUser,
-  selectedTokenId,
+  settings,
+  selectedTokenIds,
+  focusTokenId,
   searchFilter,
   onUpdateTokenPosition,
+  onUpdateTokenSize,
+  onUpdateZoneRect,
+  onBoardMetricsChange,
   onSelectToken,
+  onSelectTokenIds,
   onEditToken,
   onDeleteToken,
   onViewSchedule,
@@ -39,312 +118,543 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
   onDeleteZone,
   onAutoArrangeZone,
   onOpenRosterSheet,
-  onAddNewMagnet
+  onAddNewMagnet,
+  onOpenMagnetManager,
+  onAddNewZone,
+  onFocusHandled
 }) => {
   const canvasRef = useRef<HTMLDivElement>(null);
-  const [zoomLevel, setZoomLevel] = useState(1);
-  const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
-  const [isPanning, setIsPanning] = useState(false);
-  const [panStart, setPanStart] = useState({ x: 0, y: 0 });
-  const [snapToGrid, setSnapToGrid] = useState(false);
+  const boardRef = useRef<HTMLDivElement>(null);
 
-  // Dragging state for magnet tokens
-  const [draggingTokenId, setDraggingTokenId] = useState<string | null>(null);
-  const dragStartPos = useRef<{
-    startX: number;
-    startY: number;
-    initialTokenX: number;
-    initialTokenY: number;
-    canvasRect: DOMRect | null;
-  }>({
-    startX: 0,
-    startY: 0,
-    initialTokenX: 0,
-    initialTokenY: 0,
-    canvasRect: null
+  // 배경은 고정하고, 빈 영역 드래그는 모형 다중 선택에 사용한다.
+  const selectionSessionRef = useRef<SelectionSession | null>(null);
+  const [selectionBox, setSelectionBox] = useState<SelectionBox | null>(null);
+  const [isSelecting, setIsSelecting] = useState(false);
+
+  // 드래그 (모형 이동/크기조절, 구역 이동/크기조절)
+  const sessionRef = useRef<DragSession | null>(null);
+  const [preview, setPreview] = useState<DragPreview | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+
+  // 핸들러가 항상 최신 props 를 보도록 유지
+  const latestRef = useRef({ zones, onUpdateTokenPosition, onUpdateTokenSize, onUpdateZoneRect });
+  useEffect(() => {
+    latestRef.current = { zones, onUpdateTokenPosition, onUpdateTokenSize, onUpdateZoneRect };
   });
 
-  // Handle pointer down on magnet token
-  const handleMagnetPointerDown = (e: React.PointerEvent, token: MagnetToken) => {
-    e.stopPropagation();
-    if (!canvasRef.current) return;
+  /** 보드의 실제 픽셀 크기를 상위로 알려 배치 계산에 쓰이게 한다 */
+  useEffect(() => {
+    const board = boardRef.current;
+    if (!board) return;
 
-    const canvasRect = canvasRef.current.getBoundingClientRect();
-    setDraggingTokenId(token.id);
-    onSelectToken(token);
-
-    dragStartPos.current = {
-      startX: e.clientX,
-      startY: e.clientY,
-      initialTokenX: token.x,
-      initialTokenY: token.y,
-      canvasRect
+    const report = () => {
+      // clientWidth/Height 는 테두리를 제외한 실제 배치 영역
+      onBoardMetricsChange({ width: board.clientWidth, height: board.clientHeight });
     };
 
-    // Capture pointer to track smoothly outside window
-    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    report();
+    const observer = new ResizeObserver(report);
+    observer.observe(board);
+    return () => observer.disconnect();
+  }, [onBoardMetricsChange]);
+
+  /** 픽셀 이동량을 보드 대비 % 로 변환 (확대/축소 배율 자동 반영) */
+  const toPercentDelta = useCallback((dxPx: number, dyPx: number) => {
+    const rect = boardRef.current?.getBoundingClientRect();
+    if (!rect || rect.width === 0 || rect.height === 0) return { dx: 0, dy: 0 };
+    return { dx: (dxPx / rect.width) * 100, dy: (dyPx / rect.height) * 100 };
+  }, []);
+
+  // ---------------------------------------------------------------- 드래그 시작
+  const beginTokenDrag = (e: React.PointerEvent, token: MagnetToken) => {
+    if (e.button !== 0 && e.pointerType === 'mouse') return;
+    e.stopPropagation();
+    e.preventDefault();
+
+    onSelectToken(token, e.ctrlKey || e.metaKey);
+    sessionRef.current = {
+      kind: 'token-move',
+      id: token.id,
+      pointerId: e.pointerId,
+      originClientX: e.clientX,
+      originClientY: e.clientY,
+      startX: token.x,
+      startY: token.y
+    };
+    setPreview({ kind: 'token-move', id: token.id, x: token.x, y: token.y, moved: false });
+    setIsDragging(true);
   };
 
-  // Handle pointer move during drag
-  const handlePointerMove = useCallback((e: React.PointerEvent) => {
-    if (!draggingTokenId || !canvasRef.current) return;
+  const beginTokenResize = (e: React.PointerEvent, token: MagnetToken) => {
+    if (e.button !== 0 && e.pointerType === 'mouse') return;
+    e.stopPropagation();
+    e.preventDefault();
 
-    const { startX, startY, initialTokenX, initialTokenY, canvasRect } = dragStartPos.current;
+    onSelectToken(token);
+    const startSizePx = getTokenSizePx(token);
+    sessionRef.current = {
+      kind: 'token-resize',
+      id: token.id,
+      pointerId: e.pointerId,
+      originClientX: e.clientX,
+      originClientY: e.clientY,
+      startSizePx
+    };
+    setPreview({ kind: 'token-resize', id: token.id, sizePx: startSizePx });
+    setIsDragging(true);
+  };
+
+  const beginZoneDrag = (
+    e: React.PointerEvent,
+    zone: BoardZone,
+    handle: ZoneResizeHandle | 'move'
+  ) => {
+    if (e.button !== 0 && e.pointerType === 'mouse') return;
+    e.stopPropagation();
+    e.preventDefault();
+
+    const startRect: ZoneRect = { x: zone.x, y: zone.y, width: zone.width, height: zone.height };
+    sessionRef.current =
+      handle === 'move'
+        ? {
+            kind: 'zone-move',
+            id: zone.id,
+            pointerId: e.pointerId,
+            originClientX: e.clientX,
+            originClientY: e.clientY,
+            startRect
+          }
+        : {
+            kind: 'zone-resize',
+            id: zone.id,
+            handle,
+            pointerId: e.pointerId,
+            originClientX: e.clientX,
+            originClientY: e.clientY,
+            startRect
+          };
+    setPreview({ kind: 'zone', id: zone.id, rect: startRect, moved: false });
+    setIsDragging(true);
+  };
+
+  // ------------------------------------------------- 드래그 진행 (window 리스너)
+  useEffect(() => {
+    if (!isDragging) return;
+
+    const computeZoneRect = (
+      session: Extract<DragSession, { kind: 'zone-move' | 'zone-resize' }>,
+      dx: number,
+      dy: number
+    ): ZoneRect => {
+      const { startRect } = session;
+
+      if (session.kind === 'zone-move') {
+        return {
+          x: round1(clamp(startRect.x + dx, 0, 100 - startRect.width)),
+          y: round1(clamp(startRect.y + dy, 0, 100 - startRect.height)),
+          width: startRect.width,
+          height: startRect.height
+        };
+      }
+
+      const handle = session.handle;
+      let left = startRect.x;
+      let top = startRect.y;
+      let right = startRect.x + startRect.width;
+      let bottom = startRect.y + startRect.height;
+
+      if (handle.includes('w')) left = startRect.x + dx;
+      if (handle.includes('e')) right = startRect.x + startRect.width + dx;
+      if (handle.includes('n')) top = startRect.y + dy;
+      if (handle.includes('s')) bottom = startRect.y + startRect.height + dy;
+
+      left = Math.max(0, Math.min(left, right - MIN_ZONE_WIDTH));
+      right = Math.min(100, Math.max(right, left + MIN_ZONE_WIDTH));
+      top = Math.max(0, Math.min(top, bottom - MIN_ZONE_HEIGHT));
+      bottom = Math.min(100, Math.max(bottom, top + MIN_ZONE_HEIGHT));
+
+      return {
+        x: round1(left),
+        y: round1(top),
+        width: round1(right - left),
+        height: round1(bottom - top)
+      };
+    };
+
+    /** 대각선 방향 이동량을 지름 변화로 환산 */
+    const computeTokenSize = (
+      session: Extract<DragSession, { kind: 'token-resize' }>,
+      dxPx: number,
+      dyPx: number
+    ) => {
+      const boardRect = boardRef.current?.getBoundingClientRect();
+      const scale = boardRect && boardRect.width ? boardRect.width / (boardRef.current!.clientWidth || 1) : 1;
+      const delta = ((dxPx + dyPx) / 2 / (scale || 1)) * 2;
+      return Math.round(clamp(session.startSizePx + delta, MIN_TOKEN_PX, MAX_TOKEN_PX));
+    };
+
+    const handleMove = (e: PointerEvent) => {
+      const session = sessionRef.current;
+      if (!session || e.pointerId !== session.pointerId) return;
+
+      const dxPx = e.clientX - session.originClientX;
+      const dyPx = e.clientY - session.originClientY;
+      const moved = Math.hypot(dxPx, dyPx) > DRAG_THRESHOLD_PX;
+      const { dx, dy } = toPercentDelta(dxPx, dyPx);
+
+      if (session.kind === 'token-move') {
+        setPreview({
+          kind: 'token-move',
+          id: session.id,
+          x: round1(clamp(session.startX + dx, TOKEN_MARGIN, 100 - TOKEN_MARGIN)),
+          y: round1(clamp(session.startY + dy, TOKEN_MARGIN, 100 - TOKEN_MARGIN)),
+          moved
+        });
+      } else if (session.kind === 'token-resize') {
+        setPreview({ kind: 'token-resize', id: session.id, sizePx: computeTokenSize(session, dxPx, dyPx) });
+      } else {
+        setPreview({ kind: 'zone', id: session.id, rect: computeZoneRect(session, dx, dy), moved });
+      }
+    };
+
+    const finish = (e: PointerEvent) => {
+      const session = sessionRef.current;
+      if (!session || e.pointerId !== session.pointerId) return;
+
+      const dxPx = e.clientX - session.originClientX;
+      const dyPx = e.clientY - session.originClientY;
+      const moved = Math.hypot(dxPx, dyPx) > DRAG_THRESHOLD_PX;
+      const { dx, dy } = toPercentDelta(dxPx, dyPx);
+      const cancelled = e.type === 'pointercancel';
+
+      if (moved && !cancelled) {
+        if (session.kind === 'token-move') {
+          const x = round1(clamp(session.startX + dx, TOKEN_MARGIN, 100 - TOKEN_MARGIN));
+          const y = round1(clamp(session.startY + dy, TOKEN_MARGIN, 100 - TOKEN_MARGIN));
+          // 놓은 위치를 감싸는 구역 (겹칠 경우 가장 작은 구역 우선)
+          const targetZone = latestRef.current.zones
+            .filter((z) => x >= z.x && x <= z.x + z.width && y >= z.y && y <= z.y + z.height)
+            .sort((a, b) => a.width * a.height - b.width * b.height)[0];
+          latestRef.current.onUpdateTokenPosition(session.id, x, y, targetZone?.id);
+        } else if (session.kind === 'token-resize') {
+          latestRef.current.onUpdateTokenSize(session.id, computeTokenSize(session, dxPx, dyPx));
+        } else {
+          latestRef.current.onUpdateZoneRect(
+            session.id,
+            computeZoneRect(session, dx, dy),
+            session.kind === 'zone-move' ? 'move' : 'resize'
+          );
+        }
+      }
+
+      sessionRef.current = null;
+      setPreview(null);
+      setIsDragging(false);
+    };
+
+    window.addEventListener('pointermove', handleMove);
+    window.addEventListener('pointerup', finish);
+    window.addEventListener('pointercancel', finish);
+    return () => {
+      window.removeEventListener('pointermove', handleMove);
+      window.removeEventListener('pointerup', finish);
+      window.removeEventListener('pointercancel', finish);
+    };
+  }, [isDragging, toPercentDelta]);
+
+  // ---------------------------------------------------------- 배경 드래그 선택
+  const handleCanvasPointerDown = (e: React.PointerEvent) => {
+    const target = e.target as HTMLElement;
+    const isBackground =
+      target === canvasRef.current ||
+      target === boardRef.current ||
+      target.classList.contains('whiteboard-bg') ||
+      target.classList.contains('whiteboard-surface') ||
+      target.classList.contains('whiteboard-surface-plain');
+
+    if (!isBackground || e.button !== 0) return;
+
+    e.preventDefault();
+    const canvasRect = canvasRef.current?.getBoundingClientRect();
     if (!canvasRect) return;
 
-    const deltaX = (e.clientX - startX) / (canvasRect.width * zoomLevel) * 100;
-    const deltaY = (e.clientY - startY) / (canvasRect.height * zoomLevel) * 100;
-
-    let newX = Math.max(3, Math.min(97, initialTokenX + deltaX));
-    let newY = Math.max(3, Math.min(97, initialTokenY + deltaY));
-
-    if (snapToGrid) {
-      newX = Math.round(newX / 2.5) * 2.5;
-      newY = Math.round(newY / 2.5) * 2.5;
-    }
-
-    // Determine target zone
-    const targetZone = zones.find(z => 
-      newX >= z.x && newX <= z.x + z.width &&
-      newY >= z.y && newY <= z.y + z.height
-    );
-
-    onUpdateTokenPosition(draggingTokenId, newX, newY, targetZone?.id);
-  }, [draggingTokenId, zoomLevel, snapToGrid, zones, onUpdateTokenPosition]);
-
-  // Handle pointer up to end drag
-  const handlePointerUp = useCallback((e: React.PointerEvent) => {
-    if (draggingTokenId) {
-      setDraggingTokenId(null);
-      try {
-        (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
-      } catch (err) {}
-    }
-    if (isPanning) {
-      setIsPanning(false);
-    }
-  }, [draggingTokenId, isPanning]);
-
-  // Background Pan controls
-  const handleCanvasPointerDown = (e: React.PointerEvent) => {
-    if (e.target === canvasRef.current || (e.target as HTMLElement).classList.contains('whiteboard-bg')) {
-      onSelectToken(null);
-      if (e.button === 0) {
-        setIsPanning(true);
-        setPanStart({ x: e.clientX - panOffset.x, y: e.clientY - panOffset.y });
-      }
-    }
+    const additive = e.ctrlKey || e.metaKey;
+    selectionSessionRef.current = {
+      pointerId: e.pointerId,
+      originClientX: e.clientX,
+      originClientY: e.clientY,
+      additive,
+      initialSelection: selectedTokenIds
+    };
+    setSelectionBox({
+      left: e.clientX - canvasRect.left,
+      top: e.clientY - canvasRect.top,
+      width: 0,
+      height: 0
+    });
+    setIsSelecting(true);
   };
 
-  const handleCanvasPanMove = (e: React.PointerEvent) => {
-    if (isPanning && !draggingTokenId) {
-      setPanOffset({
-        x: e.clientX - panStart.x,
-        y: e.clientY - panStart.y
+  useEffect(() => {
+    if (!isSelecting) return;
+
+    const handleMove = (e: PointerEvent) => {
+      const session = selectionSessionRef.current;
+      if (!session || e.pointerId !== session.pointerId) return;
+      const canvasRect = canvasRef.current?.getBoundingClientRect();
+      if (!canvasRect) return;
+
+      setSelectionBox({
+        left: Math.min(session.originClientX, e.clientX) - canvasRect.left,
+        top: Math.min(session.originClientY, e.clientY) - canvasRect.top,
+        width: Math.abs(e.clientX - session.originClientX),
+        height: Math.abs(e.clientY - session.originClientY)
       });
-    } else {
-      handlePointerMove(e);
-    }
-  };
+    };
+    const stop = (e: PointerEvent) => {
+      const session = selectionSessionRef.current;
+      if (!session || e.pointerId !== session.pointerId) return;
 
-  const handleZoom = (delta: number) => {
-    setZoomLevel(prev => Math.min(2.0, Math.max(0.6, Number((prev + delta).toFixed(2)))));
-  };
+      const moved = Math.hypot(
+        e.clientX - session.originClientX,
+        e.clientY - session.originClientY
+      ) > DRAG_THRESHOLD_PX;
 
-  const handleResetView = () => {
-    setZoomLevel(1);
-    setPanOffset({ x: 0, y: 0 });
-  };
+      if (!moved) {
+        if (!session.additive) onSelectToken(null);
+      } else {
+        const left = Math.min(session.originClientX, e.clientX);
+        const right = Math.max(session.originClientX, e.clientX);
+        const top = Math.min(session.originClientY, e.clientY);
+        const bottom = Math.max(session.originClientY, e.clientY);
+        const hitIds = tokens
+          .filter((token) => {
+            const rect = document.getElementById(`magnet-${token.id}`)?.getBoundingClientRect();
+            return (
+              !!rect &&
+              rect.right >= left &&
+              rect.left <= right &&
+              rect.bottom >= top &&
+              rect.top <= bottom
+            );
+          })
+          .map((token) => token.id);
 
-  // Filter tokens based on search
-  const filteredTokens = tokens.filter(t => {
-    if (!searchFilter.trim()) return true;
-    const q = searchFilter.toLowerCase();
-    return (
-      t.title.toLowerCase().includes(q) ||
-      (t.subtitle && t.subtitle.toLowerCase().includes(q)) ||
-      (t.phone && t.phone.includes(q))
-    );
-  });
+        onSelectTokenIds(
+          session.additive
+            ? Array.from(new Set([...session.initialSelection, ...hitIds]))
+            : hitIds
+        );
+      }
+
+      selectionSessionRef.current = null;
+      setSelectionBox(null);
+      setIsSelecting(false);
+    };
+
+    window.addEventListener('pointermove', handleMove);
+    window.addEventListener('pointerup', stop);
+    window.addEventListener('pointercancel', stop);
+    return () => {
+      window.removeEventListener('pointermove', handleMove);
+      window.removeEventListener('pointerup', stop);
+      window.removeEventListener('pointercancel', stop);
+    };
+  }, [isSelecting, onSelectToken, onSelectTokenIds, tokens]);
+
+  // ------------------------------------------- '위치 확인' 시 해당 모형으로 이동
+  useEffect(() => {
+    if (!focusTokenId) return;
+
+    const tokenEl = document.getElementById(`magnet-${focusTokenId}`);
+    tokenEl?.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+
+    const timer = window.setTimeout(onFocusHandled, 1800);
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusTokenId]);
+
+  // ------------------------------------------------------------------- 검색
+  const query = searchFilter.trim().toLowerCase();
+  const isSearching = query.length > 0;
+
+  const matchesSearch = (t: MagnetToken) =>
+    isSearching &&
+    (t.title.toLowerCase().includes(query) ||
+      (t.subtitle ? t.subtitle.toLowerCase().includes(query) : false) ||
+      (t.phone ? t.phone.includes(query) : false));
+
+  const matchCount = isSearching ? tokens.filter(matchesSearch).length : 0;
+
+  const activeZoneId = preview?.kind === 'zone' ? preview.id : null;
 
   return (
     <div className="relative flex-1 w-full h-full overflow-hidden bg-stone-200/90 flex flex-col select-none">
-      {/* Top Floating Board Status & Controls Bar */}
-      <div className="absolute top-3 left-3 right-3 z-30 flex items-center justify-between pointer-events-none">
-        {/* Left Badge: Quick Overview */}
-        <div className="pointer-events-auto flex items-center gap-2 bg-white/90 backdrop-blur-md px-3 py-1.5 rounded-xl border border-stone-200 shadow-md text-xs font-semibold text-stone-700">
-          <span className="w-2.5 h-2.5 rounded-full bg-green-500 animate-ping inline-block" />
+      {/* 상단 플로팅 상태 & 뷰 컨트롤 */}
+      <div className="absolute top-3 left-3 right-3 z-30 flex items-start justify-between gap-2 pointer-events-none">
+        <div className="pointer-events-auto flex items-center gap-2 bg-white/90 backdrop-blur-md px-3 py-1.5 rounded-xl border border-stone-200 shadow-md text-xs font-semibold text-stone-700 whitespace-nowrap">
+          <span className="w-2.5 h-2.5 rounded-full bg-green-500 animate-ping inline-block shrink-0" />
           <span className="text-stone-900 font-bold">실시간 보드</span>
           <span className="text-stone-300">|</span>
-          <span>모형 <strong className="text-blue-600 font-extrabold">{tokens.length}</strong>개</span>
+          <span>
+            기사 <strong className="text-blue-600 font-extrabold">{tokens.length}</strong>명
+          </span>
           <span className="text-stone-300">|</span>
-          <span>구역 <strong className="text-amber-600 font-extrabold">{zones.length}</strong>개</span>
-        </div>
-
-        {/* Right Controls: Zoom & Grid Snap */}
-        <div className="pointer-events-auto flex items-center gap-1.5 bg-white/90 backdrop-blur-md p-1 rounded-xl border border-stone-200 shadow-md text-xs">
-          <button
-            onClick={() => setSnapToGrid(prev => !prev)}
-            className={`p-1.5 rounded-lg font-semibold flex items-center gap-1 transition-colors ${
-              snapToGrid
-                ? 'bg-blue-600 text-white shadow-xs'
-                : 'text-stone-600 hover:bg-stone-100'
-            }`}
-            title="격자 자석 스냅 켜기/끄기"
-          >
-            <Grid className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline text-[11px]">스냅 {snapToGrid ? 'ON' : 'OFF'}</span>
-          </button>
-
-          <div className="w-px h-4 bg-stone-200 mx-0.5" />
-
-          <button
-            onClick={() => handleZoom(-0.15)}
-            className="p-1.5 text-stone-600 hover:text-stone-900 hover:bg-stone-100 rounded-lg transition-colors"
-            title="축소 (Zoom Out)"
-          >
-            <ZoomOut className="w-3.5 h-3.5" />
-          </button>
-
-          <span className="text-[11px] font-mono font-bold text-stone-700 w-11 text-center">
-            {Math.round(zoomLevel * 100)}%
+          <span>
+            구역 <strong className="text-amber-600 font-extrabold">{zones.length}</strong>개
           </span>
 
-          <button
-            onClick={() => handleZoom(0.15)}
-            className="p-1.5 text-stone-600 hover:text-stone-900 hover:bg-stone-100 rounded-lg transition-colors"
-            title="확대 (Zoom In)"
-          >
-            <ZoomIn className="w-3.5 h-3.5" />
-          </button>
-
-          <button
-            onClick={handleResetView}
-            className="p-1.5 text-stone-600 hover:text-stone-900 hover:bg-stone-100 rounded-lg transition-colors"
-            title="화면 배율 초기화"
-          >
-            <RotateCcw className="w-3.5 h-3.5" />
-          </button>
+          {isSearching && (
+            <>
+              <span className="text-stone-300">|</span>
+              <span className="flex items-center gap-1 text-blue-700">
+                <Search className="w-3 h-3 shrink-0" />
+                <strong className="font-extrabold">{matchCount}</strong>건 검색됨
+              </span>
+            </>
+          )}
         </div>
+
+        <div className="pointer-events-none flex items-center gap-1.5 bg-white/90 backdrop-blur-md px-3 py-2 rounded-xl border border-stone-200 shadow-md text-[11px] font-semibold text-stone-600 whitespace-nowrap">
+          <MousePointer2 className="w-3.5 h-3.5 text-blue-600" />
+          빈 영역을 드래그하여 모형 선택
+        </div>
+
       </div>
 
-      {/* Main Interactive Whiteboard Canvas */}
+      {/* 메인 보드 */}
       <div
         ref={canvasRef}
         onPointerDown={handleCanvasPointerDown}
-        onPointerMove={handleCanvasPanMove}
-        onPointerUp={handlePointerUp}
-        className="whiteboard-bg flex-1 w-full h-full overflow-hidden relative cursor-default"
+        className={`whiteboard-bg flex-1 w-full h-full overflow-hidden relative ${
+          isSelecting ? 'cursor-crosshair' : 'cursor-default'
+        }`}
         style={{ touchAction: 'none' }}
       >
-        {/* Scalable & Pannable Whiteboard Frame Container */}
         <div
+          ref={boardRef}
           style={{
-            transform: `translate(${panOffset.x}px, ${panOffset.y}px) scale(${zoomLevel})`,
-            transformOrigin: '50% 50%',
-            transition: isPanning || draggingTokenId ? 'none' : 'transform 0.15s ease-out',
             width: '100%',
-            height: '100%',
-            minWidth: '950px',
-            minHeight: '620px'
+            height: '100%'
           }}
-          className="absolute inset-0 m-auto whiteboard-surface rounded-2xl border-[10px] border-stone-300 shadow-2xl relative overflow-hidden"
+          className={`absolute inset-0 m-auto ${
+            settings.showGrid ? 'whiteboard-surface' : 'whiteboard-surface-plain'
+          } rounded-2xl border-[10px] border-stone-300 shadow-2xl overflow-hidden`}
         >
-          {/* Top Aluminum Header Label (like real whiteboard) */}
-          <div className="absolute top-2 left-4 text-xs font-bold text-stone-400/80 tracking-widest uppercase select-none pointer-events-none flex items-center gap-2">
+          <div className="absolute top-2 left-4 text-xs font-bold text-stone-400/80 tracking-widest uppercase select-none pointer-events-none flex items-center gap-2 whitespace-nowrap">
             <span className="w-2 h-2 rounded-full bg-stone-300 inline-block" />
-            <span>WHITEBOARD ALLOCATION SYSTEM</span>
+            <span>{settings.companyName || 'FIELD DISPATCH BOARD'}</span>
           </div>
 
-          {/* Top-Right Authentic Roster Pinned Widget (matches photo!) */}
-          <div
-            onClick={onOpenRosterSheet}
-            className="absolute top-3 right-4 z-20 cursor-pointer bg-white/95 border-2 border-stone-300 shadow-md rounded-lg p-2.5 max-w-[210px] hover:border-blue-500 hover:shadow-lg transition-all text-left group"
-          >
-            <div className="flex items-center justify-between border-b border-stone-200 pb-1 mb-1.5">
-              <span className="text-[10px] font-extrabold text-blue-700 uppercase">
-                (주)유로테크 명단표
-              </span>
-              <span className="text-[9px] bg-amber-100 text-amber-800 font-bold px-1 rounded">
-                클릭시 전체보기
-              </span>
-            </div>
-            <div className="text-[11px] font-bold text-stone-900 leading-tight">
-              대표: 김진영
-            </div>
-            <div className="text-[9px] text-stone-500 mt-0.5">
-              한샘 A/S (시공일 1개월 이후)
-            </div>
-            <div className="mt-1.5 pt-1 border-t border-stone-100 flex items-center justify-between text-[9px] font-semibold text-blue-600 group-hover:underline">
-              <span>인원 배정표 열기</span>
-              <span>→</span>
-            </div>
-          </div>
-
-          {/* Authentic Hand-written Marker Annotations on Board (inspired by the photo: 전단 5 / 후단 4 / 배리 6) */}
-          <div className="absolute top-16 right-56 pointer-events-none select-none text-stone-800/80 font-handwriting text-2xl font-bold tracking-wider leading-snug drop-shadow-xs rotate-[-3deg]">
-            <div>전단 5</div>
-            <div>후단 4</div>
-            <div>배리 6</div>
-          </div>
-
-          {/* 1. Render Zones */}
+          {/* 1. 구역 */}
           {zones.map((zone) => {
+            const zonePreview =
+              preview?.kind === 'zone' && preview.id === zone.id ? preview.rect : null;
+            const renderedZone = zonePreview ? { ...zone, ...zonePreview } : zone;
             const tokensInZone = tokens.filter((t) => t.zoneId === zone.id);
+
             return (
               <ZoneCardComponent
                 key={zone.id}
-                zone={zone}
+                zone={renderedZone}
                 tokensInZone={tokensInZone}
+                isActive={activeZoneId === zone.id}
+                showCapacity={settings.showZoneCapacity}
+                showSubtitle={settings.showZoneSubtitle}
                 onEditZone={onEditZone}
                 onDeleteZone={onDeleteZone}
                 onAutoArrangeZone={onAutoArrangeZone}
+                onZonePointerDown={beginZoneDrag}
               />
             );
           })}
 
-          {/* 2. Render Magnet Tokens */}
-          {filteredTokens.map((token) => (
-            <MagnetTokenComponent
-              key={token.id}
-              token={token}
-              isSelected={token.id === selectedTokenId}
-              isDragging={token.id === draggingTokenId}
-              scale={zoomLevel}
-              onPointerDown={handleMagnetPointerDown}
-              onClick={(tok) => onSelectToken(tok)}
-              onEdit={onEditToken}
-              onDelete={onDeleteToken}
-              onViewSchedule={onViewSchedule}
-              onQuickStatusChange={onQuickStatusChange}
-            />
-          ))}
+          {/* 2. 모형 (검색 중에도 모두 표시, 일치 항목만 강조) */}
+          {tokens.map((token) => {
+            const movePreview =
+              preview?.kind === 'token-move' && preview.id === token.id ? preview : null;
+            const resizePreview =
+              preview?.kind === 'token-resize' && preview.id === token.id ? preview : null;
+            const isMatch = matchesSearch(token);
 
-          {/* Bottom-right Aluminum Brand Stamp */}
-          <div className="absolute bottom-2 right-4 text-[10px] font-mono text-stone-400/80 pointer-events-none select-none">
-            EUROTECH MAGNET DISPATCH v2.0
-          </div>
+            return (
+              <MagnetTokenComponent
+                key={token.id}
+                token={token}
+                previewX={movePreview?.x}
+                previewY={movePreview?.y}
+                previewSizePx={resizePreview?.sizePx}
+                isSelected={selectedTokenIds.includes(token.id)}
+                isDragging={!!movePreview && movePreview.moved}
+                isResizing={!!resizePreview}
+                isFocused={token.id === focusTokenId}
+                isSearchMatch={isMatch}
+                isSearchDimmed={isSearching && !isMatch}
+                searchHighlight={settings.searchHighlight}
+                showStatusDot={settings.showStatusDot}
+                showSubtitle={settings.showTokenSubtitle}
+                onPointerDown={beginTokenDrag}
+                onResizePointerDown={beginTokenResize}
+                onEdit={onEditToken}
+                onDelete={onDeleteToken}
+                onViewSchedule={onViewSchedule}
+                onQuickStatusChange={onQuickStatusChange}
+              />
+            );
+          })}
         </div>
+
+        {selectionBox && (
+          <div
+            className="absolute z-40 pointer-events-none border-2 border-blue-500 bg-blue-400/15 rounded-sm shadow-[0_0_0_1px_rgba(255,255,255,0.7)]"
+            style={selectionBox}
+          />
+        )}
       </div>
 
-      {/* Bottom Floating Quick Actions on Mobile / Desktop */}
-      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-30 flex items-center gap-2 bg-white/95 backdrop-blur-md px-4 py-2 rounded-2xl border border-stone-200 shadow-xl">
+      {/* 하단 플로팅 퀵 액션 */}
+      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-30 flex items-center gap-2 bg-white/95 backdrop-blur-md px-4 py-2 rounded-2xl border border-stone-200 shadow-xl max-w-[calc(100%-1.5rem)] overflow-x-auto custom-scrollbar">
         <button
           type="button"
           onClick={onAddNewMagnet}
-          className="px-3 py-1.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-xs transition-all flex items-center gap-1.5"
+          className="px-3 py-1.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-xs transition-all flex items-center gap-1.5 whitespace-nowrap shrink-0"
         >
-          <Plus className="w-4 h-4" />
+          <Plus className="w-4 h-4 shrink-0" />
           <span>새 모형 추가</span>
         </button>
 
         <button
           type="button"
+          onClick={onOpenMagnetManager}
+          className="px-3 py-1.5 text-xs font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-xl transition-all flex items-center gap-1.5 whitespace-nowrap shrink-0"
+          title="모형 목록 선택 및 속성 일괄 수정"
+        >
+          <ListChecks className="w-4 h-4 shrink-0" />
+          <span>모형 관리</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={onAddNewZone}
+          className="px-3 py-1.5 text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 rounded-xl shadow-xs transition-all flex items-center gap-1.5 whitespace-nowrap shrink-0"
+          title="새 보드 구역 추가"
+        >
+          <Layout className="w-4 h-4 shrink-0" />
+          <span>구역 추가</span>
+        </button>
+
+        <button
+          type="button"
           onClick={onOpenRosterSheet}
-          className="px-3 py-1.5 text-xs font-bold text-stone-700 bg-stone-100 hover:bg-stone-200 rounded-xl transition-all flex items-center gap-1.5"
+          className="px-3 py-1.5 text-xs font-bold text-stone-700 bg-stone-100 hover:bg-stone-200 rounded-xl transition-all flex items-center gap-1.5 whitespace-nowrap shrink-0"
         >
           <span>📋 현장 명단표</span>
         </button>
+
+        <div className="hidden md:flex items-center gap-1 pl-2 ml-1 border-l border-stone-200 text-[11px] text-stone-500 font-medium whitespace-nowrap shrink-0">
+          <MousePointer2 className="w-3.5 h-3.5 text-stone-400 shrink-0" />
+          <span>Ctrl+클릭 다중 선택 · Ctrl+A 구역 전체 선택 · 빈 영역 드래그 선택</span>
+        </div>
       </div>
     </div>
   );

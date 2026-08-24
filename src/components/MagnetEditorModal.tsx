@@ -1,11 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { MagnetToken, MagnetShape, MagnetSize, MagnetStatus, MagnetFontStyle, BoardZone } from '../types';
-import { Sparkles, Palette, Type, Check, X, Shield, Phone, Tag } from 'lucide-react';
+import { MagnetToken, MagnetShape, MagnetSize, MagnetStatus, MagnetFontStyle, BoardZone, SiteSettings } from '../types';
+import { SIZE_PRESET_PX, MIN_TOKEN_PX, MAX_TOKEN_PX, getTokenSizePx } from '../utils/layout';
+import { Check, X, Phone, Maximize2 } from 'lucide-react';
+import { useEscapeClose } from '../hooks/useEscapeClose';
 
 interface MagnetEditorModalProps {
   isOpen: boolean;
   token: Partial<MagnetToken> | null;
   zones: BoardZone[];
+  settings: SiteSettings;
   onClose: () => void;
   onSave: (tokenData: Partial<MagnetToken>) => void;
 }
@@ -29,6 +32,7 @@ export const MagnetEditorModal: React.FC<MagnetEditorModalProps> = ({
   isOpen,
   token,
   zones,
+  settings,
   onClose,
   onSave
 }) => {
@@ -39,6 +43,7 @@ export const MagnetEditorModal: React.FC<MagnetEditorModalProps> = ({
   const [color, setColor] = useState('#fef9c3');
   const [textColor, setTextColor] = useState('#1c1917');
   const [size, setSize] = useState<MagnetSize>('md');
+  const [sizePx, setSizePx] = useState<number>(SIZE_PRESET_PX.md);
   const [fontStyle, setFontStyle] = useState<MagnetFontStyle>('handwriting');
   const [status, setStatus] = useState<MagnetStatus>('assigned');
   const [zoneId, setZoneId] = useState<string>('');
@@ -53,6 +58,7 @@ export const MagnetEditorModal: React.FC<MagnetEditorModalProps> = ({
       setColor(token.color || '#fef9c3');
       setTextColor(token.textColor || '#1c1917');
       setSize(token.size || 'md');
+      setSizePx(getTokenSizePx({ size: token.size || 'md', sizePx: token.sizePx }));
       setFontStyle(token.fontStyle || 'handwriting');
       setStatus(token.status || 'assigned');
       setZoneId(token.zoneId || '');
@@ -63,15 +69,18 @@ export const MagnetEditorModal: React.FC<MagnetEditorModalProps> = ({
       setSubtitle('');
       setPhone('');
       setShape('circle');
-      setColor('#fef9c3');
+      setColor(settings.defaultMagnetColor);
       setTextColor('#1c1917');
-      setSize('md');
-      setFontStyle('handwriting');
+      setSize(settings.defaultMagnetSize);
+      setSizePx(SIZE_PRESET_PX[settings.defaultMagnetSize]);
+      setFontStyle(settings.defaultFontStyle);
       setStatus('assigned');
       setZoneId(zones[0]?.id || '');
       setNotes('');
     }
-  }, [token, zones, isOpen]);
+  }, [token, zones, isOpen, settings]);
+
+  useEscapeClose(isOpen, onClose);
 
   if (!isOpen) return null;
 
@@ -91,6 +100,7 @@ export const MagnetEditorModal: React.FC<MagnetEditorModalProps> = ({
       color,
       textColor,
       size,
+      sizePx,
       fontStyle,
       status,
       zoneId: zoneId || undefined,
@@ -99,7 +109,10 @@ export const MagnetEditorModal: React.FC<MagnetEditorModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/50 backdrop-blur-xs animate-in fade-in duration-150">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/50 backdrop-blur-xs animate-in fade-in duration-150"
+      onClick={onClose}
+    >
       <div
         className="w-full max-w-lg bg-white rounded-2xl shadow-2xl border border-stone-200 overflow-hidden flex flex-col max-h-[92vh]"
         onClick={(e) => e.stopPropagation()}
@@ -138,8 +151,11 @@ export const MagnetEditorModal: React.FC<MagnetEditorModalProps> = ({
               style={{
                 backgroundColor: color,
                 color: textColor,
-                width: shape === 'rounded-rect' || shape === 'pill' ? '90px' : '72px',
-                height: '72px'
+                width:
+                  shape === 'rounded-rect' || shape === 'pill'
+                    ? `${Math.round(sizePx * 1.3)}px`
+                    : `${sizePx}px`,
+                height: `${sizePx}px`
               }}
               className={`relative flex flex-col items-center justify-center border-2 border-stone-300/80 shadow-lg ${
                 shape === 'circle'
@@ -288,25 +304,39 @@ export const MagnetEditorModal: React.FC<MagnetEditorModalProps> = ({
                 크기 (Size)
               </label>
               <div className="grid grid-cols-4 gap-1.5">
-                {[
-                  { id: 'sm', label: '소 (50px)' },
-                  { id: 'md', label: '중 (66px)' },
-                  { id: 'lg', label: '대 (82px)' },
-                  { id: 'xl', label: '특대 (98px)' }
-                ].map((sz) => (
+                {(['sm', 'md', 'lg', 'xl'] as MagnetSize[]).map((sz) => (
                   <button
-                    key={sz.id}
+                    key={sz}
                     type="button"
-                    onClick={() => setSize(sz.id as MagnetSize)}
-                    className={`py-1.5 text-xs font-medium rounded-lg border text-center transition-all ${
-                      size === sz.id
+                    onClick={() => {
+                      setSize(sz);
+                      setSizePx(SIZE_PRESET_PX[sz]);
+                    }}
+                    className={`py-1.5 text-xs font-medium rounded-lg border text-center transition-all whitespace-nowrap ${
+                      sizePx === SIZE_PRESET_PX[sz]
                         ? 'border-blue-600 bg-blue-600 text-white shadow-xs'
                         : 'border-stone-200 text-stone-700 hover:bg-stone-50'
                     }`}
                   >
-                    {sz.id.toUpperCase()}
+                    {sz.toUpperCase()}
                   </button>
                 ))}
+              </div>
+
+              <div className="mt-2 flex items-center gap-2">
+                <Maximize2 className="w-3.5 h-3.5 text-stone-400 shrink-0" />
+                <input
+                  type="range"
+                  min={MIN_TOKEN_PX}
+                  max={MAX_TOKEN_PX}
+                  step={2}
+                  value={sizePx}
+                  onChange={(e) => setSizePx(Number(e.target.value))}
+                  className="flex-1 min-w-0 accent-blue-600"
+                />
+                <span className="text-[11px] font-mono font-bold text-stone-600 w-12 text-right shrink-0">
+                  {sizePx}px
+                </span>
               </div>
             </div>
 

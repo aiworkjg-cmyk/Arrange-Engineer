@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
-import { MagnetToken, BoardZone } from '../types';
-import { FileSpreadsheet, Phone, Search, Plus, MapPin, X, ExternalLink, Check, UserPlus } from 'lucide-react';
+import { MagnetToken, BoardZone, SiteSettings } from '../types';
+import { Phone, Search, X, UserPlus } from 'lucide-react';
+import { useEscapeClose } from '../hooks/useEscapeClose';
 
 interface RosterSheetModalProps {
   isOpen: boolean;
   tokens: MagnetToken[];
   zones: BoardZone[];
+  settings: SiteSettings;
   onClose: () => void;
   onSelectToken: (tokenId: string) => void;
   onAddNewMember: (name: string, phone: string, role: string) => void;
@@ -15,6 +17,7 @@ export const RosterSheetModal: React.FC<RosterSheetModalProps> = ({
   isOpen,
   tokens,
   zones,
+  settings,
   onClose,
   onSelectToken,
   onAddNewMember
@@ -24,6 +27,8 @@ export const RosterSheetModal: React.FC<RosterSheetModalProps> = ({
   const [newName, setNewName] = useState('');
   const [newPhone, setNewPhone] = useState('');
   const [newRole, setNewRole] = useState('');
+
+  useEscapeClose(isOpen, onClose);
 
   if (!isOpen) return null;
 
@@ -44,7 +49,10 @@ export const RosterSheetModal: React.FC<RosterSheetModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/50 backdrop-blur-xs animate-in fade-in duration-150">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/50 backdrop-blur-xs animate-in fade-in duration-150"
+      onClick={onClose}
+    >
       <div
         className="w-full max-w-3xl bg-white rounded-2xl shadow-2xl border border-stone-200 overflow-hidden flex flex-col max-h-[90vh]"
         onClick={(e) => e.stopPropagation()}
@@ -56,16 +64,18 @@ export const RosterSheetModal: React.FC<RosterSheetModalProps> = ({
               📋
             </div>
             <div>
-              <div className="flex items-center gap-2">
-                <h3 className="font-extrabold text-stone-900 text-base sm:text-lg">
-                  한샘 A/S 시공팀 배정 및 현장 명단표
+              <div className="flex items-center gap-2 min-w-0">
+                <h3 className="font-extrabold text-stone-900 text-base sm:text-lg truncate whitespace-nowrap">
+                  {settings.rosterTitle}
                 </h3>
-                <span className="px-2 py-0.5 text-[11px] font-bold bg-blue-600 text-white rounded">
-                  (주)유로테크
-                </span>
+                {settings.companyName && (
+                  <span className="px-2 py-0.5 text-[11px] font-bold bg-blue-600 text-white rounded whitespace-nowrap shrink-0">
+                    {settings.companyName}
+                  </span>
+                )}
               </div>
-              <p className="text-xs text-stone-600 mt-1">
-                대표: 김진영 (010-5537-5645) | 본사: 경기 광명시 하안로 60 SK테크노파크 D동
+              <p className="text-xs text-stone-600 mt-1 whitespace-nowrap">
+                등록 기사 {tokens.length}명 · 운영 구역 {zones.length}개
               </p>
             </div>
           </div>

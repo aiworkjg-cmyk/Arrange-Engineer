@@ -1,4 +1,26 @@
-import { BoardState, BoardZone, MagnetToken, ScheduleItem, UserAccount, ActivityLog } from '../types';
+import { BoardState, BoardZone, MagnetToken, ScheduleItem, UserAccount, ActivityLog, SiteSettings } from '../types';
+
+export const DEFAULT_DASHBOARD_TITLE = '시공기사 배치 대시보드';
+
+/** 이전 버전에서 쓰던 제목 - 저장된 데이터를 새 제목으로 옮길 때 사용 */
+export const LEGACY_DASHBOARD_TITLES = ['현장 시공 & 라인 배치 화이트보드'];
+
+export const DEFAULT_SITE_SETTINGS: SiteSettings = {
+  dashboardTitle: DEFAULT_DASHBOARD_TITLE,
+  companyName: '(주)유로테크',
+  rosterTitle: '한샘 A/S 시공팀 배정 및 현장 명단표',
+  showGrid: true,
+  showZoneCapacity: true,
+  showZoneSubtitle: true,
+  showStatusDot: true,
+  showTokenSubtitle: true,
+  searchHighlight: 'pulse',
+  defaultMagnetSize: 'md',
+  defaultMagnetColor: '#fef9c3',
+  defaultFontStyle: 'handwriting',
+  confirmOnDelete: false,
+  keepInsideZone: true
+};
 
 export const INITIAL_ZONES: BoardZone[] = [
   {
@@ -487,7 +509,29 @@ export const INITIAL_TOKENS: MagnetToken[] = [
   }
 ];
 
+/** 마스터(관리자) 계정 - 아이디/비밀번호 모두 'admin' 으로 통일. 로그인 후 변경 가능 */
+export const MASTER_USER_ID = 'u-admin';
+export const DEFAULT_MASTER_LOGIN_ID = 'admin';
+export const DEFAULT_MASTER_PASSWORD = 'admin';
+
+/** 마스터가 새 계정을 만들 때 부여되는 기본 비밀번호 */
+export const DEFAULT_USER_PASSWORD = '1234';
+
+export const MASTER_USER: UserAccount = {
+  id: MASTER_USER_ID,
+  name: '마스터 관리자',
+  email: 'admin@eurotech.co.kr',
+  role: '대표',
+  phone: '010-0000-0000',
+  avatarColor: '#0f172a',
+  department: '시스템 관리',
+  loginId: DEFAULT_MASTER_LOGIN_ID,
+  password: DEFAULT_MASTER_PASSWORD,
+  isMaster: true
+};
+
 export const INITIAL_USERS: UserAccount[] = [
+  MASTER_USER,
   {
     id: 'u-kjy',
     name: '김진영',
@@ -703,7 +747,7 @@ export const INITIAL_LOGS: ActivityLog[] = [
 
 export const INITIAL_BOARD_STATE: BoardState = {
   version: 1,
-  title: '현장 시공 & 라인 배치 화이트보드',
+  title: DEFAULT_DASHBOARD_TITLE,
   lastSavedAt: new Date().toISOString(),
   lastSavedBy: '김진영 (대표)',
   tokens: INITIAL_TOKENS,

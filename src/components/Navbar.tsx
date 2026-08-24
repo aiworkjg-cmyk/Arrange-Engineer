@@ -1,140 +1,155 @@
 import React from 'react';
-import { UserAccount, BoardState, ScheduleItem } from '../types';
-import { Plus, Layout, FileText, UserCheck, Calendar, Search, Sparkles, HardDrive, Shield, RefreshCw } from 'lucide-react';
+import { UserAccount } from '../types';
+import { HardHat, FolderOpen, Calendar, Search, Undo2, Redo2, Settings, ShieldCheck } from 'lucide-react';
 
 interface NavbarProps {
   boardTitle: string;
+  companyName: string;
   activeUser: UserAccount;
   userPendingSchedulesCount: number;
   searchFilter: string;
+  canUndo: boolean;
+  canRedo: boolean;
   onSearchChange: (query: string) => void;
-  onOpenAddMagnet: () => void;
-  onOpenAddZone: () => void;
-  onOpenMarkdownBackup: () => void;
+  onUndo: () => void;
+  onRedo: () => void;
+  onOpenLayoutLibrary: () => void;
   onOpenScheduleHistory: () => void;
-  onOpenAuthModal: () => void;
-  onResetBoard: () => void;
+  onOpenSettings: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
   boardTitle,
+  companyName,
   activeUser,
   userPendingSchedulesCount,
   searchFilter,
+  canUndo,
+  canRedo,
   onSearchChange,
-  onOpenAddMagnet,
-  onOpenAddZone,
-  onOpenMarkdownBackup,
+  onUndo,
+  onRedo,
+  onOpenLayoutLibrary,
   onOpenScheduleHistory,
-  onOpenAuthModal,
-  onResetBoard
+  onOpenSettings
 }) => {
   return (
     <header className="bg-white border-b border-stone-200 sticky top-0 z-40 select-none shadow-2xs">
       <div className="max-w-7xl mx-auto px-3 sm:px-4 py-2.5 flex items-center justify-between gap-2">
-        {/* Left Brand & Title */}
+        {/* 좌측 로고 & 제목 */}
         <div className="flex items-center gap-2.5 min-w-0">
-          <div className="w-9 h-9 rounded-xl bg-blue-600 text-white flex items-center justify-center font-black text-base shadow-sm shrink-0">
-            🧲
+          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-amber-400 to-amber-600 text-white flex items-center justify-center shadow-sm shrink-0">
+            <HardHat className="w-5 h-5" strokeWidth={2.4} />
           </div>
           <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <h1 className="font-extrabold text-stone-900 text-sm sm:text-base truncate">
+            <div className="flex items-center gap-2 min-w-0">
+              <h1 className="font-extrabold text-stone-900 text-sm sm:text-base truncate whitespace-nowrap">
                 {boardTitle}
               </h1>
-              <span className="hidden md:inline-block px-2 py-0.5 text-[10px] font-bold rounded-full bg-blue-50 text-blue-700 border border-blue-200">
-                실시간 드래그&배치
-              </span>
+              {companyName && (
+                <span className="hidden md:inline-block px-2 py-0.5 text-[10px] font-bold rounded-full bg-amber-50 text-amber-700 border border-amber-200 whitespace-nowrap shrink-0">
+                  {companyName}
+                </span>
+              )}
             </div>
-            <p className="text-[11px] text-stone-500 hidden sm:block truncate">
-              자석 모형 자유 배치 • 일정 및 작업 이력 관리 • 마크다운 로컬 백업
+            <p className="text-[11px] text-stone-500 hidden sm:block truncate whitespace-nowrap">
+              기사 배치 · 구역 관리 · 배치표 저장 및 불러오기
             </p>
           </div>
         </div>
 
-        {/* Center Search Input */}
-        <div className="hidden lg:flex items-center relative w-64">
+        {/* 중앙 검색 */}
+        <div className="hidden lg:flex items-center relative w-60 shrink-0">
           <Search className="w-3.5 h-3.5 text-stone-400 absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             type="text"
             value={searchFilter}
             onChange={(e) => onSearchChange(e.target.value)}
-            placeholder="모형 이름, 직책, 구역 검색..."
-            className="w-full pl-8 pr-3 py-1.5 text-xs rounded-xl border border-stone-200 bg-stone-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
+            placeholder="기사 이름, 직책, 연락처 검색..."
+            className="w-full pl-8 pr-7 py-1.5 text-xs rounded-xl border border-stone-200 bg-stone-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
           />
           {searchFilter && (
             <button
+              type="button"
               onClick={() => onSearchChange('')}
               className="absolute right-2.5 text-xs text-stone-400 hover:text-stone-600"
+              title="검색어 지우기"
             >
               ✕
             </button>
           )}
         </div>
 
-        {/* Right Actions Toolbar */}
+        {/* 우측 액션 */}
         <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-          {/* Add Magnet */}
+          <div className="flex items-center bg-stone-100 rounded-xl p-0.5 shrink-0">
+            <button
+              type="button"
+              onClick={onUndo}
+              disabled={!canUndo}
+              className="p-1.5 rounded-lg text-stone-600 enabled:hover:bg-white enabled:hover:text-stone-900 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              title="되돌리기 (Ctrl+Z)"
+            >
+              <Undo2 className="w-3.5 h-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={onRedo}
+              disabled={!canRedo}
+              className="p-1.5 rounded-lg text-stone-600 enabled:hover:bg-white enabled:hover:text-stone-900 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              title="다시 실행 (Ctrl+Shift+Z / Ctrl+Y)"
+            >
+              <Redo2 className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+          {/* 배치표 저장 / 불러오기 */}
           <button
-            onClick={onOpenAddMagnet}
-            className="hidden sm:flex items-center gap-1 px-3 py-1.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-xs transition-all"
-            title="새 모형 자석 추가"
+            type="button"
+            onClick={onOpenLayoutLibrary}
+            className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 text-xs font-bold text-stone-700 bg-stone-100 hover:bg-stone-200 border border-stone-200 rounded-xl transition-all whitespace-nowrap shrink-0"
+            title="현재 배치표를 저장하거나 저장된 배치표를 불러옵니다"
           >
-            <Plus className="w-3.5 h-3.5" />
-            <span>모형 추가</span>
+            <FolderOpen className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+            <span className="hidden sm:inline">배치표 저장/불러오기</span>
           </button>
 
-          {/* Add Zone */}
+          {/* 내 일정 / 작업 이력 */}
           <button
-            onClick={onOpenAddZone}
-            className="hidden sm:flex items-center gap-1 px-2.5 py-1.5 text-xs font-bold text-stone-700 bg-stone-100 hover:bg-stone-200 rounded-xl transition-all"
-            title="새 구역 추가"
-          >
-            <Layout className="w-3.5 h-3.5" />
-            <span className="hidden md:inline">구역 추가</span>
-          </button>
-
-          {/* Markdown Backup / Restore */}
-          <button
-            onClick={onOpenMarkdownBackup}
-            className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 text-xs font-bold text-stone-700 bg-stone-100 hover:bg-stone-200 border border-stone-200 rounded-xl transition-all"
-            title="마크다운 백업 및 복원"
-          >
-            <FileText className="w-3.5 h-3.5 text-blue-600" />
-            <span className="hidden sm:inline">마크다운 백업</span>
-          </button>
-
-          {/* User Schedule & History Portal Button */}
-          <button
+            type="button"
             onClick={onOpenScheduleHistory}
-            className="relative flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 text-xs font-bold text-white bg-stone-900 hover:bg-stone-800 rounded-xl shadow-xs transition-all"
+            className="relative flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 text-xs font-bold text-white bg-stone-900 hover:bg-stone-800 rounded-xl shadow-xs transition-all whitespace-nowrap shrink-0"
           >
-            <Calendar className="w-3.5 h-3.5 text-amber-300" />
+            <Calendar className="w-3.5 h-3.5 text-amber-300 shrink-0" />
             <span className="hidden sm:inline">내 일정 / 작업 이력</span>
             <span className="sm:hidden">내 일정</span>
             {userPendingSchedulesCount > 0 && (
-              <span className="w-4 h-4 rounded-full bg-rose-500 text-white text-[10px] font-extrabold flex items-center justify-center">
+              <span className="w-4 h-4 rounded-full bg-rose-500 text-white text-[10px] font-extrabold flex items-center justify-center shrink-0">
                 {userPendingSchedulesCount}
               </span>
             )}
           </button>
 
-          {/* Active User Account Switcher */}
+          {/* 계정 / 설정 관리 */}
           <button
-            onClick={onOpenAuthModal}
-            className="flex items-center gap-2 p-1 sm:pl-1.5 sm:pr-2.5 rounded-xl border border-stone-200 hover:border-stone-300 bg-stone-50 hover:bg-stone-100 transition-colors"
-            title="계정 전환 및 로그인"
+            type="button"
+            onClick={onOpenSettings}
+            className="flex items-center gap-2 p-1 sm:pl-1.5 sm:pr-2.5 rounded-xl border border-stone-200 hover:border-blue-300 bg-stone-50 hover:bg-blue-50 transition-colors shrink-0 group"
+            title="사이트 설정 관리"
           >
             <div
               style={{ backgroundColor: activeUser.avatarColor || '#3b82f6' }}
-              className="w-6 h-6 rounded-lg text-white font-bold text-xs flex items-center justify-center shadow-2xs"
+              className="w-6 h-6 rounded-lg text-white font-bold text-xs flex items-center justify-center shadow-2xs shrink-0"
             >
-              {activeUser.name.slice(0, 1)}
+              {activeUser.isMaster ? <ShieldCheck className="w-3.5 h-3.5" /> : activeUser.name.slice(0, 1)}
             </div>
             <div className="hidden sm:flex flex-col text-left leading-none">
-              <span className="text-xs font-bold text-stone-900">{activeUser.name}</span>
-              <span className="text-[10px] text-stone-500">{activeUser.role}</span>
+              <span className="text-xs font-bold text-stone-900 whitespace-nowrap">{activeUser.name}</span>
+              <span className="text-[10px] text-stone-500 whitespace-nowrap">
+                {activeUser.isMaster ? '마스터 관리자' : activeUser.role}
+              </span>
             </div>
+            <Settings className="w-3.5 h-3.5 text-stone-400 group-hover:text-blue-600 transition-colors shrink-0" />
           </button>
         </div>
       </div>

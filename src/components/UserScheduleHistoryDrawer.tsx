@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { UserAccount, ScheduleItem, ActivityLog, MagnetToken, BoardZone } from '../types';
 import { Calendar, Clock, MapPin, CheckCircle2, AlertCircle, Plus, User, ArrowRight, History, Shield, Phone, Sparkles, Filter, ChevronRight, X } from 'lucide-react';
 import confetti from 'canvas-confetti';
+import { useEscapeClose } from '../hooks/useEscapeClose';
 
 interface UserScheduleHistoryDrawerProps {
   isOpen: boolean;
@@ -40,6 +41,8 @@ export const UserScheduleHistoryDrawer: React.FC<UserScheduleHistoryDrawerProps>
   const [newZoneId, setNewZoneId] = useState(zones[0]?.id || '');
   const [newLocation, setNewLocation] = useState('');
   const [newNotes, setNewNotes] = useState('');
+
+  useEscapeClose(isOpen, onClose);
 
   if (!isOpen) return null;
 
@@ -104,7 +107,10 @@ export const UserScheduleHistoryDrawer: React.FC<UserScheduleHistoryDrawerProps>
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-stone-900/40 backdrop-blur-xs animate-in fade-in duration-150">
+    <div
+      className="fixed inset-0 z-50 flex justify-end bg-stone-900/40 backdrop-blur-xs animate-in fade-in duration-150"
+      onClick={onClose}
+    >
       <div
         className="w-full max-w-md md:max-w-lg bg-white h-full shadow-2xl flex flex-col border-l border-stone-200 animate-in slide-in-from-right duration-200"
         onClick={(e) => e.stopPropagation()}
@@ -187,7 +193,7 @@ export const UserScheduleHistoryDrawer: React.FC<UserScheduleHistoryDrawerProps>
             </div>
           ) : (
             <div className="text-xs text-amber-700 bg-amber-50 p-2 rounded-lg border border-amber-200">
-              보드에 등록된 전용 모형이 없습니다. 상단 ➕ 모형 추가로 나만의 자석을 만들어보세요!
+              보드에 등록된 전용 모형이 없습니다. 화면 하단의 [새 모형 추가] 버튼으로 나만의 자석을 만들어보세요!
             </div>
           )}
         </div>

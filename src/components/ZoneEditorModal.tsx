@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { BoardZone } from '../types';
-import { X, Layout, Palette } from 'lucide-react';
+import { X, Layout, Move, Maximize2 } from 'lucide-react';
 
 interface ZoneEditorModalProps {
   isOpen: boolean;
@@ -18,6 +18,14 @@ const ZONE_THEMES = [
   { name: '슬레이트 (대기/휴식)', bg: 'rgba(241, 245, 249, 0.8)', border: '#cbd5e1', header: '#475569' }
 ];
 
+const MIN_WIDTH = 10;
+const MIN_HEIGHT = 12;
+
+const DEFAULT_RECT = { x: 20, y: 20, width: 25, height: 35 };
+
+const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n));
+const round1 = (n: number) => Number(n.toFixed(1));
+
 export const ZoneEditorModal: React.FC<ZoneEditorModalProps> = ({
   isOpen,
   zone,
@@ -27,28 +35,50 @@ export const ZoneEditorModal: React.FC<ZoneEditorModalProps> = ({
   const [title, setTitle] = useState('');
   const [code, setCode] = useState('');
   const [subtitle, setSubtitle] = useState('');
-  const [description, setDescription] = useState('');
   const [maxCapacity, setMaxCapacity] = useState<number | undefined>(undefined);
   const [selectedTheme, setSelectedTheme] = useState(ZONE_THEMES[0]);
 
+  // 위치 / 크기 (보드 대비 %)
+  const [posX, setPosX] = useState(DEFAULT_RECT.x);
+  const [posY, setPosY] = useState(DEFAULT_RECT.y);
+  const [width, setWidth] = useState(DEFAULT_RECT.width);
+  const [height, setHeight] = useState(DEFAULT_RECT.height);
+
   useEffect(() => {
+    if (!isOpen) return;
+
     if (zone) {
       setTitle(zone.title || '');
       setCode(zone.code || '');
       setSubtitle(zone.subtitle || '');
-      setDescription(zone.description || '');
       setMaxCapacity(zone.maxCapacity);
-      const match = ZONE_THEMES.find(t => t.header === zone.headerColor) || ZONE_THEMES[0];
-      setSelectedTheme(match);
+      setSelectedTheme(ZONE_THEMES.find((t) => t.header === zone.headerColor) || ZONE_THEMES[0]);
+      setPosX(zone.x ?? DEFAULT_RECT.x);
+      setPosY(zone.y ?? DEFAULT_RECT.y);
+      setWidth(zone.width ?? DEFAULT_RECT.width);
+      setHeight(zone.height ?? DEFAULT_RECT.height);
     } else {
       setTitle('');
       setCode('');
       setSubtitle('');
-      setDescription('');
       setMaxCapacity(10);
       setSelectedTheme(ZONE_THEMES[0]);
+      setPosX(DEFAULT_RECT.x);
+      setPosY(DEFAULT_RECT.y);
+      setWidth(DEFAULT_RECT.width);
+      setHeight(DEFAULT_RECT.height);
     }
   }, [zone, isOpen]);
+
+  // ESC 로 닫기
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [isOpen, onClose]);
 
   if (!isOpen) return null;
 
@@ -59,44 +89,81 @@ export const ZoneEditorModal: React.FC<ZoneEditorModalProps> = ({
       return;
     }
 
+    // 보드 밖으로 벗어나지 않도록 보정한 뒤 저장
+    const safeWidth = clamp(width || MIN_WIDTH, MIN_WIDTH, 100);
+    const safeHeight = clamp(height || MIN_HEIGHT, MIN_HEIGHT, 100);
+
     onSave({
       id: zone?.id,
       title: title.trim(),
       code: code.trim() || undefined,
       subtitle: subtitle.trim() || undefined,
-      description: description.trim() || undefined,
       maxCapacity: maxCapacity ? Number(maxCapacity) : undefined,
       bgColor: selectedTheme.bg,
       borderColor: selectedTheme.border,
-      headerColor: selectedTheme.header
+      headerColor: selectedTheme.header,
+      x: round1(clamp(posX, 0, 100 - safeWidth)),
+      y: round1(clamp(posY, 0, 100 - safeHeight)),
+      width: round1(safeWidth),
+      height: round1(safeHeight)
     });
   };
 
+  const numberField = (
+    label: string,
+    value: number,
+    setValue: (n: number) => void,
+    min: number,
+    max: number
+  ) => (
+    <div>
+      <label className="block text-[11px] font-semibold text-stone-600 mb-1 whitespace-nowrap">{label}</label>
+      <div className="relative">
+        <input
+          type="number"
+          min={min}
+          max={max}
+          step={0.5}
+          value={value}
+          onChange={(e) => setValue(clamp(Number(e.target.value), min, max))}
+          className="w-full pl-2.5 pr-6 py-1.5 text-sm rounded-lg border border-stone-300 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+        />
+        <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] text-stone-400 pointer-events-none">
+          %
+        </span>
+      </div>
+    </div>
+  );
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/50 backdrop-blur-xs animate-in fade-in duration-150">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/50 backdrop-blur-xs animate-in fade-in duration-150"
+      onClick={onClose}
+    >
       <div
-        className="w-full max-w-md bg-white rounded-2xl shadow-2xl border border-stone-200 overflow-hidden"
+        className="w-full max-w-md bg-white rounded-2xl shadow-2xl border border-stone-200 overflow-hidden flex flex-col max-h-[92vh]"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between px-5 py-4 border-b border-stone-100 bg-stone-50">
-          <div className="flex items-center gap-2">
-            <Layout className="w-5 h-5 text-blue-600" />
-            <h3 className="font-bold text-stone-800 text-base">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-stone-100 bg-stone-50 shrink-0">
+          <div className="flex items-center gap-2 min-w-0">
+            <Layout className="w-5 h-5 text-blue-600 shrink-0" />
+            <h3 className="font-bold text-stone-800 text-base whitespace-nowrap truncate">
               {zone?.id ? '구역 속성 수정' : '새 보드 구역 추가'}
             </h3>
           </div>
           <button
+            type="button"
             onClick={onClose}
-            className="p-1.5 text-stone-400 hover:text-stone-700 hover:bg-stone-200/60 rounded-full transition-colors"
+            className="p-1.5 text-stone-400 hover:text-stone-700 hover:bg-stone-200/60 rounded-full transition-colors shrink-0"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-5 space-y-4">
+        <form onSubmit={handleSubmit} className="p-5 space-y-4 overflow-y-auto custom-scrollbar">
           <div className="grid grid-cols-3 gap-2">
             <div className="col-span-2">
-              <label className="block text-xs font-semibold text-stone-700 mb-1">
+              <label className="block text-xs font-semibold text-stone-700 mb-1 whitespace-nowrap">
                 구역명 <span className="text-rose-500">*</span>
               </label>
               <input
@@ -105,11 +172,12 @@ export const ZoneEditorModal: React.FC<ZoneEditorModalProps> = ({
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="예: 1구역 (전단 5조)"
                 className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                autoFocus
                 required
               />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-stone-700 mb-1">
+              <label className="block text-xs font-semibold text-stone-700 mb-1 whitespace-nowrap">
                 코드 (약어)
               </label>
               <input
@@ -123,7 +191,7 @@ export const ZoneEditorModal: React.FC<ZoneEditorModalProps> = ({
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-stone-700 mb-1">
+            <label className="block text-xs font-semibold text-stone-700 mb-1 whitespace-nowrap">
               부제목 / 설명
             </label>
             <input
@@ -135,8 +203,49 @@ export const ZoneEditorModal: React.FC<ZoneEditorModalProps> = ({
             />
           </div>
 
+          {/* 위치 조정 */}
+          <div className="p-3 rounded-xl border border-stone-200 bg-stone-50/70 space-y-3">
+            <div className="flex items-center gap-1.5 text-xs font-bold text-stone-700 whitespace-nowrap">
+              <Move className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+              <span>위치 조정</span>
+              <span className="font-medium text-[11px] text-stone-400">(보드 왼쪽 상단 기준)</span>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              {numberField('가로 위치 X', posX, setPosX, 0, 100 - MIN_WIDTH)}
+              {numberField('세로 위치 Y', posY, setPosY, 0, 100 - MIN_HEIGHT)}
+            </div>
+
+            <div className="flex items-center gap-1.5 text-xs font-bold text-stone-700 pt-1 whitespace-nowrap">
+              <Maximize2 className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+              <span>사이즈 조정</span>
+              <span className="font-medium text-[11px] text-stone-400">(보드 전체 대비 비율)</span>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              {numberField('너비 W', width, setWidth, MIN_WIDTH, 100)}
+              {numberField('높이 H', height, setHeight, MIN_HEIGHT, 100)}
+            </div>
+
+            {/* 미니 미리보기 */}
+            <div className="relative w-full h-24 rounded-lg border border-stone-300 bg-white overflow-hidden">
+              <div
+                style={{
+                  left: `${clamp(posX, 0, 100 - width)}%`,
+                  top: `${clamp(posY, 0, 100 - height)}%`,
+                  width: `${width}%`,
+                  height: `${height}%`,
+                  backgroundColor: selectedTheme.bg,
+                  borderColor: selectedTheme.border
+                }}
+                className="absolute rounded border-2 border-dashed transition-all"
+              />
+              <span className="absolute bottom-1 right-1.5 text-[9px] font-mono text-stone-400">
+                보드 미리보기
+              </span>
+            </div>
+          </div>
+
           <div>
-            <label className="block text-xs font-semibold text-stone-700 mb-1.5">
+            <label className="block text-xs font-semibold text-stone-700 mb-1.5 whitespace-nowrap">
               테마 색상
             </label>
             <div className="grid grid-cols-3 gap-2">
@@ -146,7 +255,7 @@ export const ZoneEditorModal: React.FC<ZoneEditorModalProps> = ({
                   type="button"
                   onClick={() => setSelectedTheme(theme)}
                   style={{ backgroundColor: theme.bg, borderColor: theme.border }}
-                  className={`p-2 rounded-lg border text-left text-xs font-medium transition-all ${
+                  className={`p-2 rounded-lg border text-left text-xs font-medium transition-all whitespace-nowrap ${
                     selectedTheme.header === theme.header
                       ? 'ring-2 ring-blue-600 font-bold shadow-xs'
                       : 'hover:opacity-90'
@@ -156,14 +265,14 @@ export const ZoneEditorModal: React.FC<ZoneEditorModalProps> = ({
                     style={{ backgroundColor: theme.header }}
                     className="inline-block w-2.5 h-2.5 rounded-full mr-1.5 align-middle"
                   />
-                  <span className="truncate">{theme.name.split(' ')[0]}</span>
+                  <span>{theme.name.split(' ')[0]}</span>
                 </button>
               ))}
             </div>
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-stone-700 mb-1">
+            <label className="block text-xs font-semibold text-stone-700 mb-1 whitespace-nowrap">
               최대 수용 정원 (선택)
             </label>
             <input
@@ -181,13 +290,13 @@ export const ZoneEditorModal: React.FC<ZoneEditorModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-xs font-semibold text-stone-600 hover:bg-stone-100 rounded-lg"
+              className="px-4 py-2 text-xs font-semibold text-stone-600 hover:bg-stone-100 rounded-lg whitespace-nowrap"
             >
               취소
             </button>
             <button
               type="submit"
-              className="px-5 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-sm"
+              className="px-5 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-sm whitespace-nowrap"
             >
               저장하기
             </button>
