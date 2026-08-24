@@ -12,13 +12,16 @@ interface WhiteboardCanvasProps {
   selectedTokenIds: string[];
   focusTokenId: string | null;
   searchFilter: string;
-  onUpdateTokenPosition: (tokenId: string, x: number, y: number, newZoneId?: string) => void;
+  onUpdateTokenPositions: (
+    moves: Array<{ id: string; x: number; y: number; zoneId?: string }>
+  ) => void;
   onUpdateTokenSize: (tokenId: string, sizePx: number) => void;
   onUpdateZoneRect: (zoneId: string, rect: ZoneRect, mode: 'move' | 'resize') => void;
   onBoardMetricsChange: (metrics: BoardMetrics) => void;
   onSelectToken: (token: MagnetToken | null, additive?: boolean) => void;
   onSelectTokenIds: (tokenIds: string[]) => void;
   onEditToken: (token: MagnetToken) => void;
+  onEditSelectedTokens: (tokenIds: string[]) => void;
   onDeleteToken: (tokenId: string) => void;
   onViewSchedule: (token: MagnetToken) => void;
   onQuickStatusChange: (tokenId: string, status: MagnetStatus) => void;
@@ -45,8 +48,7 @@ type DragSession =
       pointerId: number;
       originClientX: number;
       originClientY: number;
-      startX: number;
-      startY: number;
+      members: Array<{ id: string; startX: number; startY: number }>;
     }
   | {
       kind: 'token-resize';
@@ -75,7 +77,7 @@ type DragSession =
     };
 
 type DragPreview =
-  | { kind: 'token-move'; id: string; x: number; y: number; moved: boolean }
+  | { kind: 'token-move'; id: string; positions: Record<string, { x: number; y: number }>; moved: boolean }
   | { kind: 'token-resize'; id: string; sizePx: number }
   | { kind: 'zone'; id: string; rect: ZoneRect; moved: boolean };
 
@@ -104,13 +106,14 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
   selectedTokenIds,
   focusTokenId,
   searchFilter,
-  onUpdateTokenPosition,
+  onUpdateTokenPositions,
   onUpdateTokenSize,
   onUpdateZoneRect,
   onBoardMetricsChange,
   onSelectToken,
   onSelectTokenIds,
   onEditToken,
+  onEditSelectedTokens,
   onDeleteToken,
   onViewSchedule,
   onQuickStatusChange,
@@ -137,9 +140,9 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
   const [isDragging, setIsDragging] = useState(false);
 
   // 핸들러가 항상 최신 props 를 보도록 유지
-  const latestRef = useRef({ zones, onUpdateTokenPosition, onUpdateTokenSize, onUpdateZoneRect });
+  const latestRef = useRef({ zones, onUpdateTokenPositions, onUpdateTokenSize, onUpdateZoneRect });
   useEffect(() => {
-    latestRef.current = { zones, onUpdateTokenPosition, onUpdateTokenSize, onUpdateZoneRect };
+    latestRef.current = { zones, onUpdateTokenPositions, onUpdateTokenSize, onUpdateZoneRect };
   });
 
   /** 보드의 실제 픽셀 크기를 상위로 알려 배치 계산에 쓰이게 한다 */
@@ -171,17 +174,25 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
     e.stopPropagation();
     e.preventDefault();
 
-    onSelectToken(token, e.ctrlKey || e.metaKey);
+    const additive = e.ctrlKey || e.metaKey;
+    const isAlreadySelected = selectedTokenIds.includes(token.id);
+    if (additive || !isAlreadySelected) onSelectToken(token, additive);
+
+    const movingTokens = isAlreadySelected && !additive
+      ? tokens.filter((item) => selectedTokenIds.includes(item.id))
+      : [token];
+    const positions = Object.fromEntries(
+      movingTokens.map((item) => [item.id, { x: item.x, y: item.y }])
+    );
     sessionRef.current = {
       kind: 'token-move',
       id: token.id,
       pointerId: e.pointerId,
       originClientX: e.clientX,
       originClientY: e.clientY,
-      startX: token.x,
-      startY: token.y
+      members: movingTokens.map((item) => ({ id: item.id, startX: item.x, startY: item.y }))
     };
-    setPreview({ kind: 'token-move', id: token.id, x: token.x, y: token.y, moved: false });
+    setPreview({ kind: 'token-move', id: token.id, positions, moved: false });
     setIsDragging(true);
   };
 
@@ -303,11 +314,19 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
       const { dx, dy } = toPercentDelta(dxPx, dyPx);
 
       if (session.kind === 'token-move') {
+        const positions = Object.fromEntries(
+          session.members.map((member) => [
+            member.id,
+            {
+              x: round1(clamp(member.startX + dx, TOKEN_MARGIN, 100 - TOKEN_MARGIN)),
+              y: round1(clamp(member.startY + dy, TOKEN_MARGIN, 100 - TOKEN_MARGIN))
+            }
+          ])
+        );
         setPreview({
           kind: 'token-move',
           id: session.id,
-          x: round1(clamp(session.startX + dx, TOKEN_MARGIN, 100 - TOKEN_MARGIN)),
-          y: round1(clamp(session.startY + dy, TOKEN_MARGIN, 100 - TOKEN_MARGIN)),
+          positions,
           moved
         });
       } else if (session.kind === 'token-resize') {
@@ -329,13 +348,15 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
 
       if (moved && !cancelled) {
         if (session.kind === 'token-move') {
-          const x = round1(clamp(session.startX + dx, TOKEN_MARGIN, 100 - TOKEN_MARGIN));
-          const y = round1(clamp(session.startY + dy, TOKEN_MARGIN, 100 - TOKEN_MARGIN));
-          // 놓은 위치를 감싸는 구역 (겹칠 경우 가장 작은 구역 우선)
-          const targetZone = latestRef.current.zones
-            .filter((z) => x >= z.x && x <= z.x + z.width && y >= z.y && y <= z.y + z.height)
-            .sort((a, b) => a.width * a.height - b.width * b.height)[0];
-          latestRef.current.onUpdateTokenPosition(session.id, x, y, targetZone?.id);
+          const moves = session.members.map((member) => {
+            const x = round1(clamp(member.startX + dx, TOKEN_MARGIN, 100 - TOKEN_MARGIN));
+            const y = round1(clamp(member.startY + dy, TOKEN_MARGIN, 100 - TOKEN_MARGIN));
+            const targetZone = latestRef.current.zones
+              .filter((z) => x >= z.x && x <= z.x + z.width && y >= z.y && y <= z.y + z.height)
+              .sort((a, b) => a.width * a.height - b.width * b.height)[0];
+            return { id: member.id, x, y, zoneId: targetZone?.id };
+          });
+          latestRef.current.onUpdateTokenPositions(moves);
         } else if (session.kind === 'token-resize') {
           latestRef.current.onUpdateTokenSize(session.id, computeTokenSize(session, dxPx, dyPx));
         } else {
@@ -515,11 +536,6 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
           )}
         </div>
 
-        <div className="pointer-events-none flex items-center gap-1.5 bg-white/90 backdrop-blur-md px-3 py-2 rounded-xl border border-stone-200 shadow-md text-[11px] font-semibold text-stone-600 whitespace-nowrap">
-          <MousePointer2 className="w-3.5 h-3.5 text-blue-600" />
-          빈 영역을 드래그하여 모형 선택
-        </div>
-
       </div>
 
       {/* 메인 보드 */}
@@ -571,8 +587,8 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
 
           {/* 2. 모형 (검색 중에도 모두 표시, 일치 항목만 강조) */}
           {tokens.map((token) => {
-            const movePreview =
-              preview?.kind === 'token-move' && preview.id === token.id ? preview : null;
+            const movePreview = preview?.kind === 'token-move' ? preview : null;
+            const movePosition = movePreview?.positions[token.id];
             const resizePreview =
               preview?.kind === 'token-resize' && preview.id === token.id ? preview : null;
             const isMatch = matchesSearch(token);
@@ -581,11 +597,11 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
               <MagnetTokenComponent
                 key={token.id}
                 token={token}
-                previewX={movePreview?.x}
-                previewY={movePreview?.y}
+                previewX={movePosition?.x}
+                previewY={movePosition?.y}
                 previewSizePx={resizePreview?.sizePx}
                 isSelected={selectedTokenIds.includes(token.id)}
-                isDragging={!!movePreview && movePreview.moved}
+                isDragging={!!movePosition && !!movePreview?.moved}
                 isResizing={!!resizePreview}
                 isFocused={token.id === focusTokenId}
                 isSearchMatch={isMatch}
@@ -595,7 +611,13 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
                 showSubtitle={settings.showTokenSubtitle}
                 onPointerDown={beginTokenDrag}
                 onResizePointerDown={beginTokenResize}
-                onEdit={onEditToken}
+                onEdit={(item) => {
+                  if (selectedTokenIds.length > 1 && selectedTokenIds.includes(item.id)) {
+                    onEditSelectedTokens(selectedTokenIds);
+                  } else {
+                    onEditToken(item);
+                  }
+                }}
                 onDelete={onDeleteToken}
                 onViewSchedule={onViewSchedule}
                 onQuickStatusChange={onQuickStatusChange}

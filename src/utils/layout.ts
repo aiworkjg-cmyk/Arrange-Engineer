@@ -176,3 +176,127 @@ export function arrangeZoneTokens(
     return { id: token.id, x: fitted.x, y: fitted.y };
   });
 }
+
+function tokenBounds(token: MagnetToken, metrics: BoardMetrics, gapPx = 6) {
+  const width = metrics.width || 1;
+  const height = metrics.height || 1;
+  const halfW = (getTokenWidthPx(token) / 2 + gapPx / 2) / width * 100;
+  const halfH = (getTokenSizePx(token) / 2 + gapPx / 2) / height * 100;
+  return {
+    left: token.x - halfW,
+    right: token.x + halfW,
+    top: token.y - halfH,
+    bottom: token.y + halfH
+  };
+}
+
+function overlaps(a: MagnetToken, b: MagnetToken, metrics: BoardMetrics) {
+  const first = tokenBounds(a, metrics);
+  const second = tokenBounds(b, metrics);
+  return !(
+    first.right <= second.left ||
+    first.left >= second.right ||
+    first.bottom <= second.top ||
+    first.top >= second.bottom
+  );
+}
+
+function fitToken(
+  token: MagnetToken,
+  zones: BoardZone[],
+  metrics: BoardMetrics,
+  keepInsideZone: boolean,
+  x: number,
+  y: number
+): MagnetToken {
+  const zone = zones.find((item) => item.id === token.zoneId);
+  if (zone && keepInsideZone) {
+    const fitted = clampTokenToZone(token, zone, metrics, x, y);
+    return { ...token, x: fitted.x, y: fitted.y };
+  }
+
+  const halfW = getTokenWidthPx(token) / 2 / (metrics.width || 1) * 100;
+  const halfH = getTokenSizePx(token) / 2 / (metrics.height || 1) * 100;
+  return {
+    ...token,
+    x: round1(clamp(x, halfW, 100 - halfW)),
+    y: round1(clamp(y, halfH, 100 - halfH))
+  };
+}
+
+/**
+ * 이동·크기 변경 뒤 모형끼리 겹치지 않도록 빈 좌표를 찾는다.
+ * 먼저 선택 그룹의 간격을 유지한 채 함께 이동하고, 공간이 부족할 때만 개별 배치한다.
+ */
+export function resolveTokenCollisions(
+  tokens: MagnetToken[],
+  movingTokenIds: Iterable<string>,
+  zones: BoardZone[],
+  metrics: BoardMetrics,
+  keepInsideZone = true
+): MagnetToken[] {
+  const movingIds = new Set(movingTokenIds);
+  if (movingIds.size === 0) return tokens;
+
+  const moving = tokens.filter((token) => movingIds.has(token.id));
+  const stationary = tokens.filter((token) => !movingIds.has(token.id));
+  const stepPx = 14;
+  const offsets: Array<{ dx: number; dy: number }> = [{ dx: 0, dy: 0 }];
+
+  for (let ring = 1; ring <= 40; ring += 1) {
+    for (let x = -ring; x <= ring; x += 1) {
+      offsets.push({ dx: x * stepPx, dy: -ring * stepPx });
+      offsets.push({ dx: x * stepPx, dy: ring * stepPx });
+    }
+    for (let y = -ring + 1; y < ring; y += 1) {
+      offsets.push({ dx: -ring * stepPx, dy: y * stepPx });
+      offsets.push({ dx: ring * stepPx, dy: y * stepPx });
+    }
+  }
+
+  const hasInternalCollision = moving.some((token, index) =>
+    moving.slice(index + 1).some((other) => overlaps(token, other, metrics))
+  );
+  const groupCandidate = hasInternalCollision
+    ? undefined
+    : offsets
+        .map(({ dx, dy }) =>
+          moving.map((token) =>
+            fitToken(
+              token,
+              zones,
+              metrics,
+              keepInsideZone,
+              token.x + dx / (metrics.width || 1) * 100,
+              token.y + dy / (metrics.height || 1) * 100
+            )
+          )
+        )
+        .find((candidate) =>
+          candidate.every((token) => stationary.every((other) => !overlaps(token, other, metrics)))
+        );
+
+  let resolved = groupCandidate;
+  if (!resolved) {
+    const placed = [...stationary];
+    resolved = moving.map((token) => {
+      const candidate = offsets
+        .map(({ dx, dy }) =>
+          fitToken(
+            token,
+            zones,
+            metrics,
+            keepInsideZone,
+            token.x + dx / (metrics.width || 1) * 100,
+            token.y + dy / (metrics.height || 1) * 100
+          )
+        )
+        .find((item) => placed.every((other) => !overlaps(item, other, metrics))) || token;
+      placed.push(candidate);
+      return candidate;
+    });
+  }
+
+  const resolvedMap = new Map(resolved.map((token) => [token.id, token]));
+  return tokens.map((token) => resolvedMap.get(token.id) || token);
+}

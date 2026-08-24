@@ -6,6 +6,8 @@ export type MagnetStatus = 'active' | 'assigned' | 'waiting' | 'break' | 'done';
 
 export type MagnetFontStyle = 'handwriting' | 'sans' | 'dodum';
 
+export type InstallerRole = '팀장' | '사수' | '부사수';
+
 export interface MagnetToken {
   id: string;
   title: string;
@@ -53,6 +55,8 @@ export interface ScheduleItem {
   userName: string;
   title: string;
   date: string;
+  /** 여러 날짜에 걸친 일정의 종료일. 없으면 date 당일 일정이다. */
+  endDate?: string;
   timeRange: string;
   zoneId?: string;
   zoneName: string;

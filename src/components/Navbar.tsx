@@ -114,15 +114,15 @@ export const Navbar: React.FC<NavbarProps> = ({
             <span className="hidden sm:inline">배치표 저장/불러오기</span>
           </button>
 
-          {/* 내 일정 / 작업 이력 */}
+          {/* 일정 캘린더 */}
           <button
             type="button"
             onClick={onOpenScheduleHistory}
             className="relative flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 text-xs font-bold text-white bg-stone-900 hover:bg-stone-800 rounded-xl shadow-xs transition-all whitespace-nowrap shrink-0"
           >
             <Calendar className="w-3.5 h-3.5 text-amber-300 shrink-0" />
-            <span className="hidden sm:inline">내 일정 / 작업 이력</span>
-            <span className="sm:hidden">내 일정</span>
+            <span className="hidden sm:inline">일정 캘린더</span>
+            <span className="sm:hidden">캘린더</span>
             {userPendingSchedulesCount > 0 && (
               <span className="w-4 h-4 rounded-full bg-rose-500 text-white text-[10px] font-extrabold flex items-center justify-center shrink-0">
                 {userPendingSchedulesCount}

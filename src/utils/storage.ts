@@ -1,4 +1,4 @@
-import { BoardState, UserAccount, ActivityLog, SiteSettings } from '../types';
+import { BoardState, UserAccount, ActivityLog, SiteSettings, InstallerRole } from '../types';
 import {
   INITIAL_BOARD_STATE,
   INITIAL_USERS,
@@ -9,12 +9,41 @@ import {
   DEFAULT_DASHBOARD_TITLE,
   LEGACY_DASHBOARD_TITLES
 } from '../data/initialData';
+import { resolveTokenCollisions } from './layout';
 
 const ACTIVE_USER_KEY = 'magnet_board_active_user_id';
 const USERS_LIST_KEY = 'magnet_board_users_list';
 const STATE_PREFIX = 'magnet_board_state_';
 const SESSION_KEY = 'magnet_board_session_user_id';
 const SETTINGS_KEY = 'magnet_board_site_settings';
+
+function normalizeInstallerRole(role?: string): InstallerRole {
+  if (role === '팀장' || role === '사수' || role === '부사수') return role;
+  if (role && /(반장|책임|대표|총괄|팀장)/.test(role)) return '팀장';
+  if (role && /(기술|기능|담당|사수)/.test(role)) return '사수';
+  return '부사수';
+}
+
+function normalizeBoardState(state: BoardState): BoardState {
+  const normalizedTokens = state.tokens.map((token) => ({
+    ...token,
+    subtitle: normalizeInstallerRole(token.subtitle)
+  }));
+  return {
+    ...state,
+    tokens: resolveTokenCollisions(
+      normalizedTokens,
+      normalizedTokens.map((token) => token.id),
+      state.zones,
+      { width: 950, height: 620 },
+      true
+    ),
+    schedules: (state.schedules || []).map((schedule) => ({
+      ...schedule,
+      role: normalizeInstallerRole(schedule.role)
+    }))
+  };
+}
 
 export function getSavedActiveUserId(): string {
   try {
@@ -167,14 +196,14 @@ export function getBoardStateForUser(userId: string): BoardState {
         if (LEGACY_DASHBOARD_TITLES.includes(parsed.title)) {
           parsed.title = DEFAULT_DASHBOARD_TITLE;
         }
-        return parsed;
+        return normalizeBoardState(parsed);
       }
     }
   } catch (e) {
     console.error('Failed to load board state', e);
   }
   // Return fresh copy of initial board state
-  return JSON.parse(JSON.stringify(INITIAL_BOARD_STATE));
+  return normalizeBoardState(JSON.parse(JSON.stringify(INITIAL_BOARD_STATE)));
 }
 
 export function saveBoardStateForUser(userId: string, state: BoardState): void {

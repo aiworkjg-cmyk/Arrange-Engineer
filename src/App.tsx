@@ -9,7 +9,8 @@ import {
   ActivityLog,
   ZoneRect,
   BoardMetrics,
-  SiteSettings
+  SiteSettings,
+  InstallerRole
 } from './types';
 import {
   getSavedActiveUserId,
@@ -26,7 +27,7 @@ import {
   addActivityLog
 } from './utils/storage';
 import { INITIAL_BOARD_STATE, INITIAL_USERS, DEFAULT_SITE_SETTINGS } from './data/initialData';
-import { arrangeZoneTokens, clampTokenToZone, getTokenSizePx } from './utils/layout';
+import { arrangeZoneTokens, clampTokenToZone, getTokenSizePx, resolveTokenCollisions } from './utils/layout';
 import { Navbar } from './components/Navbar';
 import { WhiteboardCanvas } from './components/WhiteboardCanvas';
 import { MagnetEditorModal } from './components/MagnetEditorModal';
@@ -153,6 +154,7 @@ export default function App() {
   // 5. 모달
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isScheduleDrawerOpen, setIsScheduleDrawerOpen] = useState(false);
+  const [scheduleFocusTokenId, setScheduleFocusTokenId] = useState<string | null>(null);
   const [isLayoutLibraryOpen, setIsLayoutLibraryOpen] = useState(false);
   const [isRosterModalOpen, setIsRosterModalOpen] = useState(false);
   const [isMagnetEditorOpen, setIsMagnetEditorOpen] = useState(false);
@@ -286,73 +288,49 @@ export default function App() {
   };
 
   /* ------------------------------------------------------- 모형 위치 이동 */
-  const handleUpdateTokenPosition = useCallback(
-    (tokenId: string, newX: number, newY: number, newZoneId?: string) => {
+  const handleUpdateTokenPositions = useCallback(
+    (moves: Array<{ id: string; x: number; y: number; zoneId?: string }>) => {
+      if (moves.length === 0) return;
       applyBoard((prevState) => {
-        const currentToken = prevState.tokens.find((t) => t.id === tokenId);
-        if (!currentToken) return prevState;
+        const moveMap = new Map(moves.map((move) => [move.id, move]));
+        const now = new Date().toISOString();
+        const movedNames: string[] = [];
+        const provisional = prevState.tokens.map((token) => {
+          const move = moveMap.get(token.id);
+          if (!move) return token;
+          movedNames.push(token.title);
 
-        const targetZone = prevState.zones.find((z) => z.id === newZoneId);
+          const targetZone = prevState.zones.find((zone) => zone.id === move.zoneId);
+          const fitted = targetZone && settings.keepInsideZone
+            ? clampTokenToZone(token, targetZone, boardMetricsRef.current, move.x, move.y)
+            : { x: round1(move.x), y: round1(move.y) };
+          return {
+            ...token,
+            x: fitted.x,
+            y: fitted.y,
+            zoneId: move.zoneId,
+            updatedAt: now,
+            updatedBy: activeUser.name
+          };
+        });
 
-        // 구역 안에 놓을 때는 제목/테두리를 침범하지 않도록 위치를 보정한다
-        let finalX = round1(newX);
-        let finalY = round1(newY);
-        if (targetZone && settings.keepInsideZone) {
-          const fitted = clampTokenToZone(
-            currentToken,
-            targetZone,
-            boardMetricsRef.current,
-            newX,
-            newY
-          );
-          finalX = fitted.x;
-          finalY = fitted.y;
-        }
-
-        const prevZoneId = currentToken.zoneId;
-        const zoneChanged = prevZoneId !== newZoneId;
-
-        const updatedTokens = prevState.tokens.map((t) =>
-          t.id === tokenId
-            ? {
-                ...t,
-                x: finalX,
-                y: finalY,
-                zoneId: newZoneId,
-                updatedAt: new Date().toISOString(),
-                updatedBy: activeUser.name
-              }
-            : t
+        if (movedNames.length === 0) return prevState;
+        const updatedTokens = resolveTokenCollisions(
+          provisional,
+          moveMap.keys(),
+          prevState.zones,
+          boardMetricsRef.current,
+          settings.keepInsideZone
         );
-
-        const fromZoneName = prevState.zones.find((z) => z.id === prevZoneId)?.title || '자유 배치';
-        const toZoneName = targetZone?.title || '자유 배치';
-
-        const newLog: ActivityLog = {
-          id: `log-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-          timestamp: new Date().toLocaleTimeString('ko-KR', {
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit'
-          }),
-          userName: `${activeUser.name} (${activeUser.role})`,
-          userEmail: activeUser.email,
-          action: 'move',
-          targetName: currentToken.title,
-          description: zoneChanged
-            ? `'${currentToken.title}' 기사를 ${toZoneName}(으)로 이동 배치`
-            : `'${currentToken.title}' 위치 조정 (${finalX}%, ${finalY}%)`,
-          fromZone: fromZoneName,
-          toZone: toZoneName
-        };
-
-        return {
-          ...prevState,
-          tokens: updatedTokens,
-          logs: [newLog, ...(prevState.logs || [])].slice(0, 50),
-          lastSavedAt: new Date().toISOString(),
-          lastSavedBy: activeUser.name
-        };
+        return addActivityLog(
+          { ...prevState, tokens: updatedTokens },
+          'move',
+          movedNames.length === 1 ? movedNames[0] : `${movedNames.length}개 모형`,
+          movedNames.length === 1
+            ? `'${movedNames[0]}' 모형 위치 이동`
+            : `선택한 모형 ${movedNames.length}개를 함께 이동`,
+          activeUser
+        );
       });
     },
     [applyBoard, activeUser, settings.keepInsideZone]
@@ -374,10 +352,17 @@ export default function App() {
             ? clampTokenToZone(resized, zone, boardMetricsRef.current, token.x, token.y)
             : { x: token.x, y: token.y };
 
-        const updatedTokens = prevState.tokens.map((t) =>
+        const resizedTokens = prevState.tokens.map((t) =>
           t.id === tokenId
             ? { ...resized, x: fitted.x, y: fitted.y, updatedAt: new Date().toISOString() }
             : t
+        );
+        const updatedTokens = resolveTokenCollisions(
+          resizedTokens,
+          [tokenId],
+          prevState.zones,
+          boardMetricsRef.current,
+          settings.keepInsideZone
         );
 
         return addActivityLog(
@@ -413,7 +398,7 @@ export default function App() {
         // 구역을 옮기면 소속 모형도 같이 이동하고, 크기를 바꾸면 안쪽으로 다시 맞춘다
         const dx = rect.x - zone.x;
         const dy = rect.y - zone.y;
-        const updatedTokens = prevState.tokens.map((t) => {
+        const fittedTokens = prevState.tokens.map((t) => {
           if (t.zoneId !== zoneId) return t;
 
           const moved =
@@ -427,6 +412,13 @@ export default function App() {
 
           return { ...t, x: fitted.x, y: fitted.y };
         });
+        const updatedTokens = resolveTokenCollisions(
+          fittedTokens,
+          fittedTokens.filter((token) => token.zoneId === zoneId).map((token) => token.id),
+          updatedZones,
+          boardMetricsRef.current,
+          settings.keepInsideZone
+        );
 
         return addActivityLog(
           { ...prevState, zones: updatedZones, tokens: updatedTokens },
@@ -475,6 +467,7 @@ export default function App() {
     applyBoard((prevState) => {
       let updatedTokens: MagnetToken[];
       let actionType: ActivityLog['action'] = 'update';
+      let changedTokenId = tokenData.id || '';
 
       if (tokenData.id) {
         updatedTokens = prevState.tokens.map((t) => {
@@ -534,6 +527,7 @@ export default function App() {
           updatedAt: new Date().toISOString(),
           updatedBy: activeUser.name
         };
+        changedTokenId = draft.id;
 
         if (targetZone && settings.keepInsideZone) {
           const fitted = clampTokenToZone(
@@ -550,6 +544,14 @@ export default function App() {
         updatedTokens = [...prevState.tokens, draft];
         actionType = 'create';
       }
+
+      updatedTokens = resolveTokenCollisions(
+        updatedTokens,
+        [changedTokenId],
+        prevState.zones,
+        boardMetricsRef.current,
+        settings.keepInsideZone
+      );
 
       return addActivityLog(
         { ...prevState, tokens: updatedTokens },
@@ -571,7 +573,7 @@ export default function App() {
     applyBoard((prevState) => {
       const now = new Date().toISOString();
       let changedCount = 0;
-      const updatedTokens = prevState.tokens.map((token) => {
+      const patchedTokens = prevState.tokens.map((token) => {
         if (!selectedIds.has(token.id)) return token;
 
         const merged: MagnetToken = {
@@ -597,6 +599,13 @@ export default function App() {
       });
 
       if (changedCount === 0) return prevState;
+      const updatedTokens = resolveTokenCollisions(
+        patchedTokens,
+        selectedIds,
+        prevState.zones,
+        boardMetricsRef.current,
+        settings.keepInsideZone
+      );
       return addActivityLog(
         { ...prevState, tokens: updatedTokens },
         'update',
@@ -789,7 +798,7 @@ export default function App() {
   };
 
   /* ------------------------------------------------------ 명단표 인원 추가 */
-  const handleRosterAddNewMember = (name: string, phone: string, role: string) => {
+  const handleRosterAddNewMember = (name: string, phone: string, role: InstallerRole) => {
     applyBoard((prevState) => {
       const targetZone = prevState.zones[0];
       const draft: MagnetToken = {
@@ -817,8 +826,16 @@ export default function App() {
         draft.y = fitted.y;
       }
 
+      const updatedTokens = resolveTokenCollisions(
+        [...prevState.tokens, draft],
+        [draft.id],
+        prevState.zones,
+        boardMetricsRef.current,
+        settings.keepInsideZone
+      );
+
       return addActivityLog(
-        { ...prevState, tokens: [...prevState.tokens, draft] },
+        { ...prevState, tokens: updatedTokens },
         'create',
         name,
         `명단표에서 기사 '${name}' 신규 등록`,
@@ -889,7 +906,10 @@ export default function App() {
         onUndo={() => dispatch({ type: 'undo' })}
         onRedo={() => dispatch({ type: 'redo' })}
         onOpenLayoutLibrary={() => setIsLayoutLibraryOpen(true)}
-        onOpenScheduleHistory={() => setIsScheduleDrawerOpen(true)}
+        onOpenScheduleHistory={() => {
+          setScheduleFocusTokenId(null);
+          setIsScheduleDrawerOpen(true);
+        }}
         onOpenSettings={() => setIsSettingsOpen(true)}
       />
 
@@ -901,7 +921,7 @@ export default function App() {
           selectedTokenIds={selectedTokenIds}
           focusTokenId={isAnyModalOpen ? null : focusTokenId}
           searchFilter={searchFilter}
-          onUpdateTokenPosition={handleUpdateTokenPosition}
+          onUpdateTokenPositions={handleUpdateTokenPositions}
           onUpdateTokenSize={handleUpdateTokenSize}
           onUpdateZoneRect={handleUpdateZoneRect}
           onBoardMetricsChange={handleBoardMetricsChange}
@@ -911,10 +931,12 @@ export default function App() {
             setEditingToken(tok);
             setIsMagnetEditorOpen(true);
           }}
+          onEditSelectedTokens={() => setIsMagnetManagerOpen(true)}
           onDeleteToken={handleDeleteToken}
           onViewSchedule={(tok) => {
             setSelectedTokenIds([tok.id]);
             setSelectionAnchorTokenId(tok.id);
+            setScheduleFocusTokenId(tok.id);
             setIsScheduleDrawerOpen(true);
           }}
           onQuickStatusChange={handleQuickStatusChange}
@@ -972,18 +994,16 @@ export default function App() {
 
       <UserScheduleHistoryDrawer
         isOpen={isScheduleDrawerOpen}
-        user={activeUser}
         allSchedules={boardState.schedules}
-        allLogs={boardState.logs}
         tokens={boardState.tokens}
         zones={boardState.zones}
-        onClose={() => setIsScheduleDrawerOpen(false)}
+        initialTokenId={scheduleFocusTokenId}
+        onClose={() => {
+          setIsScheduleDrawerOpen(false);
+          setScheduleFocusTokenId(null);
+        }}
         onUpdateScheduleStatus={handleUpdateScheduleStatus}
         onAddSchedule={handleAddSchedule}
-        onSwitchUser={() => {
-          setIsScheduleDrawerOpen(false);
-          setIsSettingsOpen(true);
-        }}
         onLocateToken={handleLocateToken}
       />
 
@@ -1000,10 +1020,17 @@ export default function App() {
         isOpen={isRosterModalOpen}
         tokens={boardState.tokens}
         zones={boardState.zones}
+        schedules={boardState.schedules}
         settings={settings}
         onClose={() => setIsRosterModalOpen(false)}
         onSelectToken={handleLocateToken}
+        onOpenSchedule={(tokenId) => {
+          setIsRosterModalOpen(false);
+          setScheduleFocusTokenId(tokenId);
+          setIsScheduleDrawerOpen(true);
+        }}
         onAddNewMember={handleRosterAddNewMember}
+        onBulkUpdate={handleBulkUpdateMagnets}
       />
 
       <SettingsModal

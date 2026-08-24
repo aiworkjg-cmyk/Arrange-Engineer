@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { MagnetToken, MagnetShape, MagnetSize, MagnetStatus, MagnetFontStyle, BoardZone, SiteSettings } from '../types';
+import { MagnetToken, MagnetShape, MagnetSize, MagnetStatus, MagnetFontStyle, BoardZone, SiteSettings, InstallerRole } from '../types';
 import { SIZE_PRESET_PX, MIN_TOKEN_PX, MAX_TOKEN_PX, getTokenSizePx } from '../utils/layout';
 import { Check, X, Phone, Maximize2 } from 'lucide-react';
 import { useEscapeClose } from '../hooks/useEscapeClose';
@@ -37,7 +37,7 @@ export const MagnetEditorModal: React.FC<MagnetEditorModalProps> = ({
   onSave
 }) => {
   const [title, setTitle] = useState('');
-  const [subtitle, setSubtitle] = useState('');
+  const [subtitle, setSubtitle] = useState<InstallerRole>('부사수');
   const [phone, setPhone] = useState('');
   const [shape, setShape] = useState<MagnetShape>('circle');
   const [color, setColor] = useState('#fef9c3');
@@ -52,7 +52,7 @@ export const MagnetEditorModal: React.FC<MagnetEditorModalProps> = ({
   useEffect(() => {
     if (token) {
       setTitle(token.title || '');
-      setSubtitle(token.subtitle || '');
+      setSubtitle(['팀장', '사수', '부사수'].includes(token.subtitle || '') ? token.subtitle as InstallerRole : '부사수');
       setPhone(token.phone || '');
       setShape(token.shape || 'circle');
       setColor(token.color || '#fef9c3');
@@ -66,7 +66,7 @@ export const MagnetEditorModal: React.FC<MagnetEditorModalProps> = ({
     } else {
       // Defaults for new magnet
       setTitle('');
-      setSubtitle('');
+      setSubtitle('부사수');
       setPhone('');
       setShape('circle');
       setColor(settings.defaultMagnetColor);
@@ -94,7 +94,7 @@ export const MagnetEditorModal: React.FC<MagnetEditorModalProps> = ({
     onSave({
       id: token?.id,
       title: title.trim(),
-      subtitle: subtitle.trim() || undefined,
+      subtitle,
       phone: phone.trim() || undefined,
       shape,
       color,
@@ -208,13 +208,15 @@ export const MagnetEditorModal: React.FC<MagnetEditorModalProps> = ({
               <label className="block text-xs font-semibold text-stone-700 mb-1">
                 직책 / 부서 / 역할
               </label>
-              <input
-                type="text"
+              <select
                 value={subtitle}
-                onChange={(e) => setSubtitle(e.target.value)}
-                placeholder="예: 반장 / 전단 5조"
-                className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
+                onChange={(e) => setSubtitle(e.target.value as InstallerRole)}
+                className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+              >
+                <option value="팀장">팀장</option>
+                <option value="사수">사수</option>
+                <option value="부사수">부사수</option>
+              </select>
             </div>
           </div>
 
