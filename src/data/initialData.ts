@@ -1,4 +1,15 @@
-import { BoardState, BoardZone, MagnetToken, ScheduleItem, UserAccount, ActivityLog, SiteSettings } from '../types';
+import {
+  ActivityLog,
+  BoardState,
+  BoardZone,
+  InstallerProfile,
+  InstallerRole,
+  MagnetStatus,
+  MagnetToken,
+  ScheduleItem,
+  SiteSettings,
+  UserAccount
+} from '../types';
 
 export const DEFAULT_DASHBOARD_TITLE = '시공기사 배치 대시보드';
 
@@ -8,7 +19,7 @@ export const LEGACY_DASHBOARD_TITLES = ['현장 시공 & 라인 배치 화이트
 export const DEFAULT_SITE_SETTINGS: SiteSettings = {
   dashboardTitle: DEFAULT_DASHBOARD_TITLE,
   companyName: '(주)유로테크',
-  rosterTitle: '한샘 A/S 시공팀 배정 및 현장 명단표',
+  rosterTitle: '시공기사 명단',
   showGrid: true,
   showZoneCapacity: true,
   showZoneSubtitle: true,
@@ -509,6 +520,31 @@ export const INITIAL_TOKENS: MagnetToken[] = [
   }
 ];
 
+const toInitialInstallerRole = (subtitle?: string): InstallerRole => {
+  if (subtitle && /(대표|총괄|소장|반장|팀장|책임)/.test(subtitle)) return '팀장';
+  if (subtitle && /(기술|기능|담당|사수|지원)/.test(subtitle)) return '사수';
+  return '부사수';
+};
+
+const toInitialInstallerStatus = (status: MagnetStatus): InstallerProfile['status'] => {
+  if (status === 'waiting') return 'available';
+  if (status === 'break') return 'leave';
+  if (status === 'done') return 'inactive';
+  return 'assigned';
+};
+
+/** 초기 기사 원장은 기존 샘플 모형을 바탕으로 만들되 이후에는 모형과 독립적으로 저장된다. */
+export const INITIAL_INSTALLERS: InstallerProfile[] = INITIAL_TOKENS.map((token) => ({
+  id: token.assignedUserId || `installer-${token.id}`,
+  name: token.title,
+  role: toInitialInstallerRole(token.subtitle),
+  status: toInitialInstallerStatus(token.status),
+  phone: token.phone,
+  notes: token.notes,
+  createdAt: token.updatedAt,
+  updatedAt: token.updatedAt
+}));
+
 /** 마스터(관리자) 계정 - 아이디/비밀번호 모두 'admin' 으로 통일. 로그인 후 변경 가능 */
 export const MASTER_USER_ID = 'u-admin';
 export const DEFAULT_MASTER_LOGIN_ID = 'admin';
@@ -746,13 +782,14 @@ export const INITIAL_LOGS: ActivityLog[] = [
 ];
 
 export const INITIAL_BOARD_STATE: BoardState = {
-  version: 1,
+  version: 2,
   title: DEFAULT_DASHBOARD_TITLE,
   lastSavedAt: new Date().toISOString(),
   lastSavedBy: '김진영 (대표)',
   tokens: INITIAL_TOKENS,
   zones: INITIAL_ZONES,
+  installers: INITIAL_INSTALLERS,
   schedules: INITIAL_SCHEDULES,
   logs: INITIAL_LOGS,
-  rosterTitle: '한샘 A/S 시공팀 배정 및 명단표 (광명 SK테크노파크)'
+  rosterTitle: '시공기사 명단'
 };

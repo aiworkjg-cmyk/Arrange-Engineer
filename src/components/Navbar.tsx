@@ -1,11 +1,12 @@
 import React from 'react';
 import { UserAccount } from '../types';
-import { HardHat, FolderOpen, Calendar, Search, Undo2, Redo2, Settings, ShieldCheck } from 'lucide-react';
+import { HardHat, FolderOpen, Calendar, Search, Undo2, Redo2, Settings, ShieldCheck, LogIn } from 'lucide-react';
 
 interface NavbarProps {
   boardTitle: string;
   companyName: string;
   activeUser: UserAccount;
+  isLoggedIn: boolean;
   userPendingSchedulesCount: number;
   searchFilter: string;
   canUndo: boolean;
@@ -16,12 +17,14 @@ interface NavbarProps {
   onOpenLayoutLibrary: () => void;
   onOpenScheduleHistory: () => void;
   onOpenSettings: () => void;
+  onOpenLogin: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
   boardTitle,
   companyName,
   activeUser,
+  isLoggedIn,
   userPendingSchedulesCount,
   searchFilter,
   canUndo,
@@ -31,7 +34,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   onRedo,
   onOpenLayoutLibrary,
   onOpenScheduleHistory,
-  onOpenSettings
+  onOpenSettings,
+  onOpenLogin
 }) => {
   return (
     <header className="bg-white border-b border-stone-200 sticky top-0 z-40 select-none shadow-2xs">
@@ -52,9 +56,6 @@ export const Navbar: React.FC<NavbarProps> = ({
                 </span>
               )}
             </div>
-            <p className="text-[11px] text-stone-500 hidden sm:block truncate whitespace-nowrap">
-              기사 배치 · 구역 관리 · 배치표 저장 및 불러오기
-            </p>
           </div>
         </div>
 
@@ -130,27 +131,28 @@ export const Navbar: React.FC<NavbarProps> = ({
             )}
           </button>
 
-          {/* 계정 / 설정 관리 */}
-          <button
-            type="button"
-            onClick={onOpenSettings}
-            className="flex items-center gap-2 p-1 sm:pl-1.5 sm:pr-2.5 rounded-xl border border-stone-200 hover:border-blue-300 bg-stone-50 hover:bg-blue-50 transition-colors shrink-0 group"
-            title="사이트 설정 관리"
-          >
-            <div
-              style={{ backgroundColor: activeUser.avatarColor || '#3b82f6' }}
-              className="w-6 h-6 rounded-lg text-white font-bold text-xs flex items-center justify-center shadow-2xs shrink-0"
+          {/* 계정 / 로그인 */}
+          {isLoggedIn ? (
+            <button
+              type="button"
+              onClick={onOpenSettings}
+              className="flex items-center gap-2 p-1 sm:pl-1.5 sm:pr-2.5 rounded-xl border border-stone-200 hover:border-blue-300 bg-stone-50 hover:bg-blue-50 transition-colors shrink-0 group"
+              title="사이트 설정 관리"
             >
-              {activeUser.isMaster ? <ShieldCheck className="w-3.5 h-3.5" /> : activeUser.name.slice(0, 1)}
-            </div>
-            <div className="hidden sm:flex flex-col text-left leading-none">
-              <span className="text-xs font-bold text-stone-900 whitespace-nowrap">{activeUser.name}</span>
-              <span className="text-[10px] text-stone-500 whitespace-nowrap">
-                {activeUser.isMaster ? '마스터 관리자' : activeUser.role}
-              </span>
-            </div>
-            <Settings className="w-3.5 h-3.5 text-stone-400 group-hover:text-blue-600 transition-colors shrink-0" />
-          </button>
+              <div style={{ backgroundColor: activeUser.avatarColor || '#3b82f6' }} className="w-6 h-6 rounded-lg text-white font-bold text-xs flex items-center justify-center shadow-2xs shrink-0">
+                {activeUser.isMaster ? <ShieldCheck className="w-3.5 h-3.5" /> : activeUser.name.slice(0, 1)}
+              </div>
+              <div className="hidden sm:flex flex-col text-left leading-none">
+                <span className="text-xs font-bold text-stone-900 whitespace-nowrap">{activeUser.name}</span>
+                <span className="text-[10px] text-stone-500 whitespace-nowrap">{activeUser.isMaster ? '마스터 관리자' : activeUser.role}</span>
+              </div>
+              <Settings className="w-3.5 h-3.5 text-stone-400 group-hover:text-blue-600 transition-colors shrink-0" />
+            </button>
+          ) : (
+            <button type="button" onClick={onOpenLogin} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-extrabold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-xs whitespace-nowrap">
+              <LogIn className="w-3.5 h-3.5" /> 로그인
+            </button>
+          )}
         </div>
       </div>
     </header>

@@ -3,7 +3,7 @@ import { MagnetToken, BoardZone, MagnetStatus, ZoneRect, BoardMetrics, SiteSetti
 import { MagnetTokenComponent } from './MagnetToken';
 import { ZoneCardComponent, ZoneResizeHandle } from './ZoneCard';
 import { getTokenSizePx, MIN_TOKEN_PX, MAX_TOKEN_PX } from '../utils/layout';
-import { Plus, Layout, MousePointer2, Search, ListChecks } from 'lucide-react';
+import { Plus, LayoutList, MousePointer2, Search, ListChecks, Users } from 'lucide-react';
 
 interface WhiteboardCanvasProps {
   tokens: MagnetToken[];
@@ -30,8 +30,9 @@ interface WhiteboardCanvasProps {
   onAutoArrangeZone: (zoneId: string) => void;
   onOpenRosterSheet: () => void;
   onAddNewMagnet: () => void;
-  onOpenMagnetManager: () => void;
   onAddNewZone: () => void;
+  onOpenMagnetManager: () => void;
+  onOpenZoneManager: () => void;
   onFocusHandled: () => void;
 }
 
@@ -122,8 +123,9 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
   onAutoArrangeZone,
   onOpenRosterSheet,
   onAddNewMagnet,
-  onOpenMagnetManager,
   onAddNewZone,
+  onOpenMagnetManager,
+  onOpenZoneManager,
   onFocusHandled
 }) => {
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -518,7 +520,7 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
           <span className="text-stone-900 font-bold">실시간 보드</span>
           <span className="text-stone-300">|</span>
           <span>
-            기사 <strong className="text-blue-600 font-extrabold">{tokens.length}</strong>명
+            모형 <strong className="text-blue-600 font-extrabold">{tokens.length}</strong>개
           </span>
           <span className="text-stone-300">|</span>
           <span>
@@ -647,6 +649,15 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
 
         <button
           type="button"
+          onClick={onAddNewZone}
+          className="px-3 py-1.5 text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 rounded-xl shadow-xs transition-all flex items-center gap-1.5 whitespace-nowrap shrink-0"
+        >
+          <Plus className="w-4 h-4 shrink-0" />
+          <span>구역 추가</span>
+        </button>
+
+        <button
+          type="button"
           onClick={onOpenMagnetManager}
           className="px-3 py-1.5 text-xs font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-xl transition-all flex items-center gap-1.5 whitespace-nowrap shrink-0"
           title="모형 목록 선택 및 속성 일괄 수정"
@@ -657,20 +668,23 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
 
         <button
           type="button"
-          onClick={onAddNewZone}
-          className="px-3 py-1.5 text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 rounded-xl shadow-xs transition-all flex items-center gap-1.5 whitespace-nowrap shrink-0"
-          title="새 보드 구역 추가"
+          onClick={onOpenZoneManager}
+          className="px-3 py-1.5 text-xs font-bold text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-xl transition-all flex items-center gap-1.5 whitespace-nowrap shrink-0"
+          title="전체 구역 생성·삭제 및 일괄 관리"
         >
-          <Layout className="w-4 h-4 shrink-0" />
-          <span>구역 추가</span>
+          <LayoutList className="w-4 h-4 shrink-0" />
+          <span>구역 관리</span>
         </button>
 
+        <div className="h-6 w-px bg-stone-300 mx-1 shrink-0" />
         <button
           type="button"
           onClick={onOpenRosterSheet}
-          className="px-3 py-1.5 text-xs font-bold text-stone-700 bg-stone-100 hover:bg-stone-200 rounded-xl transition-all flex items-center gap-1.5 whitespace-nowrap shrink-0"
+          className="px-3 py-1.5 text-xs font-bold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-xl transition-all flex items-center gap-1.5 whitespace-nowrap shrink-0"
+          title="모형과 독립된 시공기사 원장 관리"
         >
-          <span>📋 현장 명단표</span>
+          <Users className="w-4 h-4 shrink-0" />
+          <span>시공기사 명단</span>
         </button>
 
         <div className="hidden md:flex items-center gap-1 pl-2 ml-1 border-l border-stone-200 text-[11px] text-stone-500 font-medium whitespace-nowrap shrink-0">

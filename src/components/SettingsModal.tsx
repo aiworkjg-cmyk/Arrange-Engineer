@@ -362,7 +362,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   value={settings.rosterTitle}
                   onChange={(e) => onUpdateSettings({ rosterTitle: e.target.value })}
                   className={inputClass}
-                  placeholder="예: 시공팀 배정 및 현장 명단표"
+                  placeholder="예: 시공기사 명단"
                 />
               </div>
 
@@ -446,7 +446,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   ))}
                 </div>
                 <p className="mt-1.5 text-[11px] text-stone-500">
-                  검색 시 일치하는 기사 모형에 적용되는 애니메이션입니다.
+                  검색 시 일치하는 모형에 적용되는 애니메이션입니다.
                 </p>
               </div>
             </div>
@@ -528,12 +528,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
               </div>
 
-              {toggleRow(
-                '삭제 전 확인창',
-                '모형을 삭제할 때 확인창을 띄웁니다 (끄면 바로 삭제, Ctrl+Z 로 복구)',
-                settings.confirmOnDelete,
-                (v) => onUpdateSettings({ confirmOnDelete: v })
-              )}
+              <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5">
+                <p className="text-xs font-bold text-amber-900">삭제 전 확인창은 항상 사용됩니다.</p>
+                <p className="mt-1 text-[11px] text-amber-700">모형·구역·시공기사·일정 등 모든 삭제 작업은 확인을 한 번 거친 뒤 실행됩니다.</p>
+              </div>
             </div>
           )}
 

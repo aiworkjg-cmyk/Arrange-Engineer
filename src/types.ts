@@ -8,6 +8,28 @@ export type MagnetFontStyle = 'handwriting' | 'sans' | 'dodum';
 
 export type InstallerRole = '팀장' | '사수' | '부사수';
 
+export type InstallerStatus = 'available' | 'assigned' | 'leave' | 'inactive';
+
+/**
+ * 시공기사 원장. 보드의 MagnetToken과는 별도로 관리한다.
+ * 같은 이름의 모형이 없어도 기사는 존재할 수 있고, 반대도 가능하다.
+ */
+export interface InstallerProfile {
+  id: string;
+  name: string;
+  role: InstallerRole;
+  status: InstallerStatus;
+  phone?: string;
+  email?: string;
+  address?: string;
+  emergencyContact?: string;
+  birthDate?: string;
+  joinedDate?: string;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface MagnetToken {
   id: string;
   title: string;
@@ -145,6 +167,7 @@ export interface BoardState {
   lastSavedBy?: string;
   tokens: MagnetToken[];
   zones: BoardZone[];
+  installers: InstallerProfile[];
   schedules: ScheduleItem[];
   logs: ActivityLog[];
   rosterTitle?: string;

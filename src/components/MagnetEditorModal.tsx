@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { MagnetToken, MagnetShape, MagnetSize, MagnetStatus, MagnetFontStyle, BoardZone, SiteSettings, InstallerRole } from '../types';
+import { MagnetToken, MagnetShape, MagnetSize, MagnetStatus, MagnetFontStyle, BoardZone, SiteSettings } from '../types';
 import { SIZE_PRESET_PX, MIN_TOKEN_PX, MAX_TOKEN_PX, getTokenSizePx } from '../utils/layout';
 import { Check, X, Phone, Maximize2 } from 'lucide-react';
 import { useEscapeClose } from '../hooks/useEscapeClose';
@@ -37,7 +37,7 @@ export const MagnetEditorModal: React.FC<MagnetEditorModalProps> = ({
   onSave
 }) => {
   const [title, setTitle] = useState('');
-  const [subtitle, setSubtitle] = useState<InstallerRole>('부사수');
+  const [subtitle, setSubtitle] = useState('');
   const [phone, setPhone] = useState('');
   const [shape, setShape] = useState<MagnetShape>('circle');
   const [color, setColor] = useState('#fef9c3');
@@ -52,7 +52,7 @@ export const MagnetEditorModal: React.FC<MagnetEditorModalProps> = ({
   useEffect(() => {
     if (token) {
       setTitle(token.title || '');
-      setSubtitle(['팀장', '사수', '부사수'].includes(token.subtitle || '') ? token.subtitle as InstallerRole : '부사수');
+      setSubtitle(token.subtitle || '');
       setPhone(token.phone || '');
       setShape(token.shape || 'circle');
       setColor(token.color || '#fef9c3');
@@ -66,7 +66,7 @@ export const MagnetEditorModal: React.FC<MagnetEditorModalProps> = ({
     } else {
       // Defaults for new magnet
       setTitle('');
-      setSubtitle('부사수');
+      setSubtitle('');
       setPhone('');
       setShape('circle');
       setColor(settings.defaultMagnetColor);
@@ -87,7 +87,7 @@ export const MagnetEditorModal: React.FC<MagnetEditorModalProps> = ({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) {
-      alert('모형(인원/라벨) 이름을 입력해주세요.');
+      alert('모형 이름 또는 라벨을 입력해주세요.');
       return;
     }
 
@@ -111,11 +111,9 @@ export const MagnetEditorModal: React.FC<MagnetEditorModalProps> = ({
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/50 backdrop-blur-xs animate-in fade-in duration-150"
-      onClick={onClose}
     >
       <div
         className="w-full max-w-lg bg-white rounded-2xl shadow-2xl border border-stone-200 overflow-hidden flex flex-col max-h-[92vh]"
-        onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-stone-100 bg-stone-50/70">
@@ -125,7 +123,7 @@ export const MagnetEditorModal: React.FC<MagnetEditorModalProps> = ({
             </div>
             <div>
               <h3 className="font-bold text-stone-800 text-base">
-                {token?.id ? '모형 및 인원 속성 수정' : '새 마그넷 모형 추가'}
+                {token?.id ? '모형 속성 수정' : '새 모형 추가'}
               </h3>
               <p className="text-xs text-stone-500">
                 형태, 색상, 크기, 텍스트를 자유롭게 변경할 수 있습니다.
@@ -189,7 +187,7 @@ export const MagnetEditorModal: React.FC<MagnetEditorModalProps> = ({
             </div>
           </div>
 
-          {/* 1. Name & Role */}
+          {/* 1. Name & supporting label */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-semibold text-stone-700 mb-1">
@@ -206,17 +204,15 @@ export const MagnetEditorModal: React.FC<MagnetEditorModalProps> = ({
             </div>
             <div>
               <label className="block text-xs font-semibold text-stone-700 mb-1">
-                직책 / 부서 / 역할
+                보조 문구 (선택)
               </label>
-              <select
+              <input
+                type="text"
                 value={subtitle}
-                onChange={(e) => setSubtitle(e.target.value as InstallerRole)}
-                className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-              >
-                <option value="팀장">팀장</option>
-                <option value="사수">사수</option>
-                <option value="부사수">부사수</option>
-              </select>
+                onChange={(e) => setSubtitle(e.target.value)}
+                placeholder="예: A조, 점검, 자재"
+                className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
             </div>
           </div>
 
@@ -224,7 +220,7 @@ export const MagnetEditorModal: React.FC<MagnetEditorModalProps> = ({
           <div>
             <label className="block text-xs font-semibold text-stone-700 mb-1 flex items-center gap-1">
               <Phone className="w-3.5 h-3.5 text-stone-400" />
-              연락처 (선택)
+              연락처 표기 (선택)
             </label>
             <input
               type="text"
@@ -233,6 +229,7 @@ export const MagnetEditorModal: React.FC<MagnetEditorModalProps> = ({
               placeholder="예: 010-8533-4084"
               className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
+            <p className="mt-1 text-[11px] text-stone-400">이 값은 모형에만 표시되며 시공기사 명단을 생성하거나 변경하지 않습니다.</p>
           </div>
 
           {/* 2. Shape Selector */}

@@ -1,4 +1,13 @@
-import { BoardState, UserAccount, ActivityLog, SiteSettings, InstallerRole } from '../types';
+import {
+  ActivityLog,
+  BoardState,
+  InstallerProfile,
+  InstallerRole,
+  InstallerStatus,
+  MagnetStatus,
+  SiteSettings,
+  UserAccount
+} from '../types';
 import {
   INITIAL_BOARD_STATE,
   INITIAL_USERS,
@@ -24,13 +33,46 @@ function normalizeInstallerRole(role?: string): InstallerRole {
   return '부사수';
 }
 
+function normalizeInstallerStatus(status?: string): InstallerStatus {
+  if (status === 'available' || status === 'assigned' || status === 'leave' || status === 'inactive') {
+    return status;
+  }
+  if (status === 'waiting') return 'available';
+  if (status === 'break') return 'leave';
+  if (status === 'done') return 'inactive';
+  return 'assigned';
+}
+
+function installerStatusFromMagnet(status: MagnetStatus): InstallerStatus {
+  return normalizeInstallerStatus(status);
+}
+
 function normalizeBoardState(state: BoardState): BoardState {
-  const normalizedTokens = state.tokens.map((token) => ({
-    ...token,
-    subtitle: normalizeInstallerRole(token.subtitle)
+  const normalizedTokens = state.tokens || [];
+  const sourceInstallers: InstallerProfile[] = Array.isArray(state.installers)
+    ? state.installers
+    : normalizedTokens.map((token) => ({
+        id: token.assignedUserId || `installer-${token.id}`,
+        name: token.title,
+        role: normalizeInstallerRole(token.subtitle),
+        status: installerStatusFromMagnet(token.status),
+        phone: token.phone,
+        notes: token.notes,
+        createdAt: token.updatedAt || new Date().toISOString(),
+        updatedAt: token.updatedAt || new Date().toISOString()
+      }));
+
+  const normalizedInstallers = sourceInstallers.map((installer) => ({
+    ...installer,
+    role: normalizeInstallerRole(installer.role),
+    status: normalizeInstallerStatus(installer.status),
+    createdAt: installer.createdAt || installer.updatedAt || new Date().toISOString(),
+    updatedAt: installer.updatedAt || new Date().toISOString()
   }));
+
   return {
     ...state,
+    version: Math.max(state.version || 1, 2),
     tokens: resolveTokenCollisions(
       normalizedTokens,
       normalizedTokens.map((token) => token.id),
@@ -38,10 +80,8 @@ function normalizeBoardState(state: BoardState): BoardState {
       { width: 950, height: 620 },
       true
     ),
-    schedules: (state.schedules || []).map((schedule) => ({
-      ...schedule,
-      role: normalizeInstallerRole(schedule.role)
-    }))
+    installers: normalizedInstallers,
+    schedules: state.schedules || []
   };
 }
 
@@ -167,6 +207,9 @@ export function getSiteSettings(): SiteSettings {
     if (saved) {
       const parsed = JSON.parse(saved);
       if (parsed && typeof parsed === 'object') {
+        if (typeof parsed.rosterTitle === 'string' && /현장 명단표|배정 및 명단표/.test(parsed.rosterTitle)) {
+          parsed.rosterTitle = DEFAULT_SITE_SETTINGS.rosterTitle;
+        }
         // 새로 추가된 항목은 기본값으로 채운다
         return { ...DEFAULT_SITE_SETTINGS, ...parsed };
       }

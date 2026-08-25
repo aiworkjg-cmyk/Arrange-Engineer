@@ -10,10 +10,9 @@ import {
   ZoneRect,
   BoardMetrics,
   SiteSettings,
-  InstallerRole
+  InstallerProfile
 } from './types';
 import {
-  getSavedActiveUserId,
   saveActiveUserId,
   getSessionUserId,
   setSessionUserId,
@@ -26,13 +25,15 @@ import {
   saveSiteSettings,
   addActivityLog
 } from './utils/storage';
-import { INITIAL_BOARD_STATE, INITIAL_USERS, DEFAULT_SITE_SETTINGS } from './data/initialData';
+import { INITIAL_BOARD_STATE, DEFAULT_SITE_SETTINGS } from './data/initialData';
 import { arrangeZoneTokens, clampTokenToZone, getTokenSizePx, resolveTokenCollisions } from './utils/layout';
 import { Navbar } from './components/Navbar';
 import { WhiteboardCanvas } from './components/WhiteboardCanvas';
 import { MagnetEditorModal } from './components/MagnetEditorModal';
 import { MagnetManagerModal } from './components/MagnetManagerModal';
 import { ZoneEditorModal } from './components/ZoneEditorModal';
+import { ZoneManagerModal } from './components/ZoneManagerModal';
+import { InstallerEditorModal } from './components/InstallerEditorModal';
 import { UserScheduleHistoryDrawer } from './components/UserScheduleHistoryDrawer';
 import { LayoutLibraryModal } from './components/LayoutLibraryModal';
 import { RosterSheetModal } from './components/RosterSheetModal';
@@ -96,6 +97,14 @@ function historyReducer(state: HistoryState, action: HistoryAction): HistoryStat
 
 const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n));
 const round1 = (n: number) => Number(n.toFixed(1));
+const GUEST_USER: UserAccount = {
+  id: 'guest-preview',
+  name: '비로그인 사용자',
+  email: '',
+  role: '게스트',
+  avatarColor: '#78716c'
+};
+const createGuestBoard = () => JSON.parse(JSON.stringify(INITIAL_BOARD_STATE)) as BoardState;
 
 export default function App() {
   // 1. 계정 & 로그인 세션
@@ -103,8 +112,8 @@ export default function App() {
   const [sessionUserId, setSessionUserIdState] = useState<string | null>(() => getSessionUserId());
 
   const isLoggedIn = !!sessionUserId && users.some((u) => u.id === sessionUserId);
-  const activeUserId = sessionUserId || getSavedActiveUserId();
-  const activeUser = users.find((u) => u.id === activeUserId) || users[0] || INITIAL_USERS[0];
+  const activeUserId = sessionUserId || GUEST_USER.id;
+  const activeUser = users.find((u) => u.id === activeUserId) || GUEST_USER;
 
   // 2. 사이트 설정
   const [settings, setSettings] = useState<SiteSettings>(() => getSiteSettings());
@@ -125,7 +134,7 @@ export default function App() {
 
   // 3. 보드 상태 (히스토리 포함)
   const [history, dispatch] = useReducer(historyReducer, undefined, () => ({
-    present: getBoardStateForUser(getSessionUserId() || getSavedActiveUserId()),
+    present: getSessionUserId() ? getBoardStateForUser(getSessionUserId()!) : createGuestBoard(),
     past: [],
     future: []
   }));
@@ -160,9 +169,13 @@ export default function App() {
   const [isMagnetEditorOpen, setIsMagnetEditorOpen] = useState(false);
   const [isMagnetManagerOpen, setIsMagnetManagerOpen] = useState(false);
   const [isZoneEditorOpen, setIsZoneEditorOpen] = useState(false);
+  const [isZoneManagerOpen, setIsZoneManagerOpen] = useState(false);
+  const [isInstallerEditorOpen, setIsInstallerEditorOpen] = useState(false);
+  const [isLoginOpen, setIsLoginOpen] = useState(false);
 
   const [editingToken, setEditingToken] = useState<Partial<MagnetToken> | null>(null);
   const [editingZone, setEditingZone] = useState<Partial<BoardZone> | null>(null);
+  const [editingInstaller, setEditingInstaller] = useState<Partial<InstallerProfile> | null>(null);
 
   const isAnyModalOpen =
     isSettingsOpen ||
@@ -171,7 +184,10 @@ export default function App() {
     isRosterModalOpen ||
     isMagnetEditorOpen ||
     isMagnetManagerOpen ||
-    isZoneEditorOpen;
+    isZoneEditorOpen ||
+    isZoneManagerOpen ||
+    isInstallerEditorOpen ||
+    isLoginOpen;
 
   const handleSelectToken = useCallback((token: MagnetToken | null, additive = false) => {
     if (!token) {
@@ -256,12 +272,15 @@ export default function App() {
     setSelectedTokenIds([]);
     setSelectionAnchorTokenId(null);
     setSearchFilter('');
+    setIsLoginOpen(false);
   };
 
   const handleLogout = () => {
     setSessionUserIdState(null);
     setSessionUserId(null);
     setIsSettingsOpen(false);
+    dispatch({ type: 'load', state: createGuestBoard() });
+    setSelectedTokenIds([]);
   };
 
   const handleCreateUser = (newUserData: Omit<UserAccount, 'id'>) => {
@@ -509,7 +528,7 @@ export default function App() {
 
         const draft: MagnetToken = {
           id: `mag-${Date.now()}`,
-          title: tokenData.title || '새 기사',
+          title: tokenData.title || '새 모형',
           subtitle: tokenData.subtitle,
           phone: tokenData.phone,
           shape: tokenData.shape || 'circle',
@@ -556,8 +575,8 @@ export default function App() {
       return addActivityLog(
         { ...prevState, tokens: updatedTokens },
         actionType,
-        tokenData.title || '기사',
-        tokenData.id ? '기사 모형 속성 수정' : '새 기사 모형 생성 및 보드 배치',
+        tokenData.title || '모형',
+        tokenData.id ? '모형 속성 수정' : '새 모형 생성 및 보드 배치',
         activeUser
       );
     });
@@ -617,30 +636,38 @@ export default function App() {
   };
 
   /* ------------------------------------------------------------ 모형 삭제 */
-  const handleDeleteToken = (tokenId: string) => {
-    const token = boardState.tokens.find((t) => t.id === tokenId);
-    if (!token) return;
+  const handleDeleteTokens = (tokenIds: string[]) => {
+    const targetIds = new Set(tokenIds);
+    const targets = boardState.tokens.filter((token) => targetIds.has(token.id));
+    if (!targets.length) return;
 
     if (
-      settings.confirmOnDelete &&
-      !window.confirm(`'${token.title}' 모형을 삭제하시겠습니까? (Ctrl+Z 로 되돌릴 수 있습니다)`)
+      !window.confirm(
+        targets.length === 1
+          ? `'${targets[0].title}' 모형을 삭제하시겠습니까? (Ctrl+Z 로 되돌릴 수 있습니다)`
+          : `선택한 모형 ${targets.length}개를 삭제하시겠습니까? (Ctrl+Z 로 되돌릴 수 있습니다)`
+      )
     ) {
       return;
     }
 
     applyBoard((prevState) =>
       addActivityLog(
-        { ...prevState, tokens: prevState.tokens.filter((t) => t.id !== tokenId) },
+        { ...prevState, tokens: prevState.tokens.filter((token) => !targetIds.has(token.id)) },
         'delete',
-        token.title,
-        `'${token.title}' 모형 삭제 (Ctrl+Z 로 되돌리기 가능)`,
+        targets.length === 1 ? targets[0].title : `${targets.length}개 모형`,
+        targets.length === 1
+          ? `'${targets[0].title}' 모형 삭제 (Ctrl+Z 로 되돌리기 가능)`
+          : `선택한 모형 ${targets.length}개 삭제 (Ctrl+Z 로 되돌리기 가능)`,
         activeUser
       )
     );
 
-    setSelectedTokenIds((current) => current.filter((id) => id !== tokenId));
-    setSelectionAnchorTokenId((current) => (current === tokenId ? null : current));
+    setSelectedTokenIds((current) => current.filter((id) => !targetIds.has(id)));
+    setSelectionAnchorTokenId((current) => (current && targetIds.has(current) ? null : current));
   };
+
+  const handleDeleteToken = (tokenId: string) => handleDeleteTokens([tokenId]);
 
   /* ----------------------------------------------------- 구역 내 자동 정렬 */
   const handleAutoArrangeZone = (zoneId: string) => {
@@ -663,7 +690,7 @@ export default function App() {
         { ...prevState, tokens: updatedTokens },
         'update',
         targetZone.title,
-        `구역 내 기사 ${tokensInZone.length}명 자동 정렬`,
+        `구역 내 모형 ${tokensInZone.length}개 자동 정렬`,
         activeUser
       );
     });
@@ -722,65 +749,108 @@ export default function App() {
     setEditingZone(null);
   };
 
+  const handleBulkUpdateZones = (zoneIds: string[], patch: Partial<BoardZone>) => {
+    const selectedIds = new Set(zoneIds);
+    if (!selectedIds.size || !Object.keys(patch).length) return;
+
+    applyBoard((prevState) => {
+      const updatedZones = prevState.zones.map((zone) => {
+        if (!selectedIds.has(zone.id)) return zone;
+        const width = clamp(patch.width ?? zone.width, 10, 100 - zone.x);
+        const height = clamp(patch.height ?? zone.height, 12, 100 - zone.y);
+        return { ...zone, ...patch, width, height } as BoardZone;
+      });
+      const zoneMap = new Map<string, BoardZone>(updatedZones.map((zone) => [zone.id, zone]));
+      const updatedTokens = settings.keepInsideZone
+        ? prevState.tokens.map((token) => {
+            if (!token.zoneId || !selectedIds.has(token.zoneId)) return token;
+            const zone = zoneMap.get(token.zoneId);
+            if (!zone) return token;
+            const fitted = clampTokenToZone(token, zone, boardMetricsRef.current, token.x, token.y);
+            return { ...token, x: fitted.x, y: fitted.y };
+          })
+        : prevState.tokens;
+
+      return addActivityLog(
+        { ...prevState, zones: updatedZones, tokens: updatedTokens },
+        'update',
+        `${selectedIds.size}개 구역`,
+        `선택한 구역 ${selectedIds.size}개의 속성을 일괄 수정`,
+        activeUser
+      );
+    });
+  };
+
   /* ------------------------------------------------------------ 구역 삭제 */
-  const handleDeleteZone = (zoneId: string) => {
-    const zone = boardState.zones.find((z) => z.id === zoneId);
-    if (!zone) return;
+  const handleDeleteZones = (zoneIds: string[]) => {
+    const targetIds = new Set(zoneIds);
+    const targets = boardState.zones.filter((zone) => targetIds.has(zone.id));
+    if (!targets.length) return;
     if (
       !window.confirm(
-        `'${zone.title}' 구역을 삭제하시겠습니까?\n소속 기사는 자유 배치로 전환됩니다. (Ctrl+Z 로 되돌릴 수 있습니다)`
+        targets.length === 1
+          ? `'${targets[0].title}' 구역을 삭제하시겠습니까?\n소속 모형은 자유 배치로 전환됩니다. (Ctrl+Z 로 되돌릴 수 있습니다)`
+          : `선택한 구역 ${targets.length}개를 삭제하시겠습니까?\n소속 모형은 자유 배치로 전환됩니다. (Ctrl+Z 로 되돌릴 수 있습니다)`
       )
     ) {
       return;
     }
 
     applyBoard((prevState) => {
-      const target = prevState.zones.find((z) => z.id === zoneId);
-      if (!target) return prevState;
-
       const updatedTokens = prevState.tokens.map((t) =>
-        t.zoneId === zoneId ? { ...t, zoneId: undefined } : t
+        t.zoneId && targetIds.has(t.zoneId) ? { ...t, zoneId: undefined } : t
       );
 
       return addActivityLog(
         {
           ...prevState,
-          zones: prevState.zones.filter((z) => z.id !== zoneId),
+          zones: prevState.zones.filter((z) => !targetIds.has(z.id)),
           tokens: updatedTokens
         },
         'delete',
-        target.title,
-        `'${target.title}' 구역 삭제 (Ctrl+Z 로 되돌리기 가능)`,
+        targets.length === 1 ? targets[0].title : `${targets.length}개 구역`,
+        targets.length === 1
+          ? `'${targets[0].title}' 구역 삭제 (Ctrl+Z 로 되돌리기 가능)`
+          : `선택한 구역 ${targets.length}개 삭제 (Ctrl+Z 로 되돌리기 가능)`,
         activeUser
       );
     });
   };
 
+  const handleDeleteZone = (zoneId: string) => handleDeleteZones([zoneId]);
+
   /* ---------------------------------------------------------------- 일정 */
-  const handleUpdateScheduleStatus = (scheduleId: string, status: ScheduleItem['status']) => {
+  const handleUpdateSchedule = (scheduleId: string, patch: Partial<ScheduleItem>) => {
     applyBoard((prevState) => {
-      const sch = prevState.schedules.find((s) => s.id === scheduleId);
-      if (!sch) return prevState;
-
-      const updatedSchedules = prevState.schedules.map((s) =>
-        s.id === scheduleId ? { ...s, status } : s
+      const schedule = prevState.schedules.find((item) => item.id === scheduleId);
+      if (!schedule) return prevState;
+      const schedules = prevState.schedules.map((item) =>
+        item.id === scheduleId ? { ...item, ...patch, id: item.id } : item
       );
-
-      const statusLabels: Record<ScheduleItem['status'], string> = {
-        scheduled: '예정',
-        'in-progress': '진행중',
-        completed: '완료',
-        cancelled: '취소'
-      };
-
       return addActivityLog(
-        { ...prevState, schedules: updatedSchedules },
+        { ...prevState, schedules },
         'schedule_change',
-        sch.title,
-        `일정 상태를 '${statusLabels[status]}'으(로) 변경`,
+        patch.title || schedule.title,
+        `일정 [${patch.date || schedule.date} / ${patch.userName || schedule.userName}] 수정`,
         activeUser
       );
     });
+  };
+
+  const handleDeleteSchedule = (scheduleId: string): boolean => {
+    const schedule = boardState.schedules.find((item) => item.id === scheduleId);
+    if (!schedule) return false;
+    if (!window.confirm(`'${schedule.title}' 일정을 정말 삭제하시겠습니까?`)) return false;
+    applyBoard((prevState) =>
+      addActivityLog(
+        { ...prevState, schedules: prevState.schedules.filter((item) => item.id !== scheduleId) },
+        'delete',
+        schedule.title,
+        `일정 [${schedule.date} / ${schedule.userName}] 삭제`,
+        activeUser
+      )
+    );
+    return true;
   };
 
   const handleAddSchedule = (newSchData: Omit<ScheduleItem, 'id'>) => {
@@ -797,58 +867,157 @@ export default function App() {
     });
   };
 
-  /* ------------------------------------------------------ 명단표 인원 추가 */
-  const handleRosterAddNewMember = (name: string, phone: string, role: InstallerRole) => {
+  /* ---------------------------------------------------------- 시공기사 원장 */
+  const handleSaveInstaller = (installerData: Partial<InstallerProfile>) => {
+    applyBoard((prevState) => {
+      const now = new Date().toISOString();
+      const isEditing = !!installerData.id;
+      const installers = isEditing
+        ? prevState.installers.map((installer) =>
+            installer.id === installerData.id
+              ? { ...installer, ...installerData, updatedAt: now }
+              : installer
+          )
+        : [
+            ...prevState.installers,
+            {
+              id: `installer-${Date.now()}`,
+              name: installerData.name || '새 시공기사',
+              role: installerData.role || '부사수',
+              status: installerData.status || 'available',
+              phone: installerData.phone,
+              email: installerData.email,
+              address: installerData.address,
+              emergencyContact: installerData.emergencyContact,
+              birthDate: installerData.birthDate,
+              joinedDate: installerData.joinedDate,
+              notes: installerData.notes,
+              createdAt: now,
+              updatedAt: now
+            } as InstallerProfile
+          ];
+
+      return addActivityLog(
+        { ...prevState, installers },
+        isEditing ? 'update' : 'create',
+        installerData.name || '시공기사',
+        isEditing ? '시공기사 상세 정보 수정' : '시공기사 명단에 신규 등록',
+        activeUser
+      );
+    });
+    setIsInstallerEditorOpen(false);
+    setEditingInstaller(null);
+  };
+
+  const handleBulkUpdateInstallers = (
+    installerIds: string[],
+    patch: Partial<InstallerProfile>
+  ) => {
+    const selectedIds = new Set(installerIds);
+    if (!selectedIds.size || !Object.keys(patch).length) return;
+    applyBoard((prevState) => {
+      const now = new Date().toISOString();
+      const installers = prevState.installers.map((installer) =>
+        selectedIds.has(installer.id) ? { ...installer, ...patch, updatedAt: now } : installer
+      );
+      return addActivityLog(
+        { ...prevState, installers },
+        'update',
+        `${selectedIds.size}명 기사`,
+        `시공기사 ${selectedIds.size}명의 직책 또는 상태를 일괄 변경`,
+        activeUser
+      );
+    });
+  };
+
+  const handleCreateMagnetForInstaller = (installer: InstallerProfile) => {
+    const existing = boardState.tokens.find(
+      (token) => token.assignedUserId === installer.id || token.title === installer.name
+    );
+    if (existing) {
+      handleLocateToken(existing.id);
+      return;
+    }
+
+    const magnetId = `mag-installer-${installer.id}-${Date.now()}`;
     applyBoard((prevState) => {
       const targetZone = prevState.zones[0];
+      const statusMap: Record<InstallerProfile['status'], MagnetStatus> = {
+        available: 'waiting',
+        assigned: 'assigned',
+        leave: 'break',
+        inactive: 'done'
+      };
       const draft: MagnetToken = {
-        id: `mag-${Date.now()}`,
-        title: name,
-        subtitle: role,
-        phone,
+        id: magnetId,
+        title: installer.name,
+        subtitle: installer.role,
+        phone: installer.phone,
+        assignedUserId: installer.id,
         shape: 'circle',
         color: settings.defaultMagnetColor,
         textColor: '#1c1917',
         size: settings.defaultMagnetSize,
-        x: targetZone ? targetZone.x + targetZone.width / 2 : 45,
-        y: targetZone ? targetZone.y + targetZone.height / 2 : 45,
+        sizePx: undefined,
+        x: targetZone ? targetZone.x + targetZone.width / 2 : 50,
+        y: targetZone ? targetZone.y + targetZone.height / 2 : 50,
         zoneId: targetZone?.id,
         fontStyle: settings.defaultFontStyle,
-        status: 'assigned',
+        notes: installer.notes,
+        status: statusMap[installer.status],
         orderNumber: prevState.tokens.length + 1,
         updatedAt: new Date().toISOString(),
         updatedBy: activeUser.name
       };
-
-      if (targetZone && settings.keepInsideZone) {
-        const fitted = clampTokenToZone(draft, targetZone, boardMetricsRef.current, draft.x, draft.y);
-        draft.x = fitted.x;
-        draft.y = fitted.y;
-      }
-
-      const updatedTokens = resolveTokenCollisions(
+      const tokens = resolveTokenCollisions(
         [...prevState.tokens, draft],
         [draft.id],
         prevState.zones,
         boardMetricsRef.current,
         settings.keepInsideZone
       );
-
       return addActivityLog(
-        { ...prevState, tokens: updatedTokens },
+        { ...prevState, tokens },
         'create',
-        name,
-        `명단표에서 기사 '${name}' 신규 등록`,
+        installer.name,
+        '시공기사 명단에서 기본 설정 모형 생성',
         activeUser
       );
     });
+  };
+
+  const handleDeleteInstallers = (installerIds: string[]) => {
+    const targetIds = new Set(installerIds);
+    const targets = boardState.installers.filter((installer) => targetIds.has(installer.id));
+    if (!targets.length) return;
+    if (
+      !window.confirm(
+        targets.length === 1
+          ? `'${targets[0].name}' 기사를 명단에서 삭제하시겠습니까?\n기존 일정 기록과 같은 이름의 모형은 유지됩니다.`
+          : `선택한 기사 ${targets.length}명을 명단에서 삭제하시겠습니까?\n기존 일정 기록과 모형은 유지됩니다.`
+      )
+    ) return;
+
+    applyBoard((prevState) =>
+      addActivityLog(
+        { ...prevState, installers: prevState.installers.filter((installer) => !targetIds.has(installer.id)) },
+        'delete',
+        targets.length === 1 ? targets[0].name : `${targets.length}명 기사`,
+        `시공기사 명단에서 ${targets.length}명 삭제 (모형과 일정은 유지)`,
+        activeUser
+      )
+    );
   };
 
   /* ------------------------------------------------- 배치표 복원 / 초기화 */
   const handleRestoreState = (restored: BoardState, label: string) => {
     applyBoard((prevState) =>
       addActivityLog(
-        { ...restored, logs: prevState.logs },
+        {
+          ...restored,
+          installers: Array.isArray(restored.installers) ? restored.installers : prevState.installers,
+          logs: prevState.logs
+        },
         'import',
         label,
         `'${label}' 배치표를 불러옴 (Ctrl+Z 로 되돌리기 가능)`,
@@ -880,24 +1049,13 @@ export default function App() {
     [boardState.schedules, activeUser]
   );
 
-  /* ------------------------------------------------------------- 로그인 전 */
-  if (!isLoggedIn) {
-    return (
-      <LoginScreen
-        users={users}
-        dashboardTitle={settings.dashboardTitle}
-        companyName={settings.companyName}
-        onLogin={handleLogin}
-      />
-    );
-  }
-
   return (
     <div className="flex flex-col h-screen w-screen overflow-hidden bg-stone-100 font-sans select-none">
       <Navbar
         boardTitle={settings.dashboardTitle}
         companyName={settings.companyName}
         activeUser={activeUser}
+        isLoggedIn={isLoggedIn}
         userPendingSchedulesCount={userPendingSchedulesCount}
         searchFilter={searchFilter}
         canUndo={canUndo}
@@ -911,6 +1069,7 @@ export default function App() {
           setIsScheduleDrawerOpen(true);
         }}
         onOpenSettings={() => setIsSettingsOpen(true)}
+        onOpenLogin={() => setIsLoginOpen(true)}
       />
 
       <main className="flex-1 relative overflow-hidden flex">
@@ -951,11 +1110,12 @@ export default function App() {
             setEditingToken(null);
             setIsMagnetEditorOpen(true);
           }}
-          onOpenMagnetManager={() => setIsMagnetManagerOpen(true)}
           onAddNewZone={() => {
             setEditingZone(null);
             setIsZoneEditorOpen(true);
           }}
+          onOpenMagnetManager={() => setIsMagnetManagerOpen(true)}
+          onOpenZoneManager={() => setIsZoneManagerOpen(true)}
           onFocusHandled={() => setFocusTokenId(null)}
         />
       </main>
@@ -979,7 +1139,37 @@ export default function App() {
         selectedTokenIds={selectedTokenIds}
         onSelectionChange={handleSelectTokenIds}
         onApplyBulk={handleBulkUpdateMagnets}
+        onAdd={() => {
+          setIsMagnetManagerOpen(false);
+          setEditingToken(null);
+          setIsMagnetEditorOpen(true);
+        }}
+        onEdit={(token) => {
+          setIsMagnetManagerOpen(false);
+          setEditingToken(token);
+          setIsMagnetEditorOpen(true);
+        }}
+        onDelete={handleDeleteTokens}
         onClose={() => setIsMagnetManagerOpen(false)}
+      />
+
+      <ZoneManagerModal
+        isOpen={isZoneManagerOpen}
+        zones={boardState.zones}
+        tokens={boardState.tokens}
+        onAdd={() => {
+          setIsZoneManagerOpen(false);
+          setEditingZone(null);
+          setIsZoneEditorOpen(true);
+        }}
+        onEdit={(zone) => {
+          setIsZoneManagerOpen(false);
+          setEditingZone(zone);
+          setIsZoneEditorOpen(true);
+        }}
+        onDelete={handleDeleteZones}
+        onApplyBulk={handleBulkUpdateZones}
+        onClose={() => setIsZoneManagerOpen(false)}
       />
 
       <ZoneEditorModal
@@ -995,6 +1185,7 @@ export default function App() {
       <UserScheduleHistoryDrawer
         isOpen={isScheduleDrawerOpen}
         allSchedules={boardState.schedules}
+        installers={boardState.installers}
         tokens={boardState.tokens}
         zones={boardState.zones}
         initialTokenId={scheduleFocusTokenId}
@@ -1002,8 +1193,9 @@ export default function App() {
           setIsScheduleDrawerOpen(false);
           setScheduleFocusTokenId(null);
         }}
-        onUpdateScheduleStatus={handleUpdateScheduleStatus}
         onAddSchedule={handleAddSchedule}
+        onUpdateSchedule={handleUpdateSchedule}
+        onDeleteSchedule={handleDeleteSchedule}
         onLocateToken={handleLocateToken}
       />
 
@@ -1018,19 +1210,38 @@ export default function App() {
 
       <RosterSheetModal
         isOpen={isRosterModalOpen}
+        installers={boardState.installers}
         tokens={boardState.tokens}
-        zones={boardState.zones}
         schedules={boardState.schedules}
         settings={settings}
         onClose={() => setIsRosterModalOpen(false)}
-        onSelectToken={handleLocateToken}
-        onOpenSchedule={(tokenId) => {
+        onAddInstaller={() => {
           setIsRosterModalOpen(false);
-          setScheduleFocusTokenId(tokenId);
-          setIsScheduleDrawerOpen(true);
+          setEditingInstaller(null);
+          setIsInstallerEditorOpen(true);
         }}
-        onAddNewMember={handleRosterAddNewMember}
-        onBulkUpdate={handleBulkUpdateMagnets}
+        onEditInstaller={(installer) => {
+          setIsRosterModalOpen(false);
+          setEditingInstaller(installer);
+          setIsInstallerEditorOpen(true);
+        }}
+        onDeleteInstallers={handleDeleteInstallers}
+        onBulkUpdate={handleBulkUpdateInstallers}
+        onCreateMagnet={handleCreateMagnetForInstaller}
+        onLocateMagnet={(tokenId) => {
+          setIsRosterModalOpen(false);
+          handleLocateToken(tokenId);
+        }}
+      />
+
+      <InstallerEditorModal
+        isOpen={isInstallerEditorOpen}
+        installer={editingInstaller}
+        onClose={() => {
+          setIsInstallerEditorOpen(false);
+          setEditingInstaller(null);
+        }}
+        onSave={handleSaveInstaller}
       />
 
       <SettingsModal
@@ -1049,6 +1260,16 @@ export default function App() {
         onOpenLayoutLibrary={() => setIsLayoutLibraryOpen(true)}
         onResetBoard={handleResetBoard}
       />
+
+      {isLoginOpen && (
+        <LoginScreen
+          users={users}
+          dashboardTitle={settings.dashboardTitle}
+          companyName={settings.companyName}
+          onLogin={handleLogin}
+          onClose={() => setIsLoginOpen(false)}
+        />
+      )}
     </div>
   );
 }

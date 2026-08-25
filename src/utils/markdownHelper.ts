@@ -164,6 +164,7 @@ export function markdownToBoardState(markdownContent: string): BoardState | null
         lastSavedBy: '복원된 백업',
         tokens,
         zones: zones.length > 0 ? zones : [],
+        installers: [],
         schedules,
         logs
       };

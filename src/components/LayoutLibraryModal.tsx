@@ -142,7 +142,7 @@ export const LayoutLibraryModal: React.FC<LayoutLibraryModalProps> = ({
                 배치표 저장 / 불러오기
               </h3>
               <p className="text-xs text-stone-500 truncate whitespace-nowrap">
-                현재 기사 {state.tokens.length}명 · 구역 {state.zones.length}개
+                현재 모형 {state.tokens.length}개 · 구역 {state.zones.length}개
               </p>
             </div>
           </div>

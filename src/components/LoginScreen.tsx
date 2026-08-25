@@ -1,19 +1,21 @@
 import React, { useState } from 'react';
 import { UserAccount } from '../types';
-import { HardHat, LogIn, Eye, EyeOff, AlertTriangle } from 'lucide-react';
+import { HardHat, LogIn, Eye, EyeOff, AlertTriangle, X } from 'lucide-react';
 
 interface LoginScreenProps {
   users: UserAccount[];
   dashboardTitle: string;
   companyName: string;
   onLogin: (user: UserAccount) => void;
+  onClose?: () => void;
 }
 
 export const LoginScreen: React.FC<LoginScreenProps> = ({
   users,
   dashboardTitle,
   companyName,
-  onLogin
+  onLogin,
+  onClose
 }) => {
   const [loginId, setLoginId] = useState('');
   const [password, setPassword] = useState('');
@@ -36,11 +38,14 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 flex items-center justify-center p-4 bg-stone-100 overflow-y-auto">
+    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-stone-900/50 backdrop-blur-sm overflow-y-auto">
       {/* 배경 장식 */}
-      <div className="absolute inset-0 whiteboard-surface opacity-60 pointer-events-none" />
-
       <div className="relative w-full max-w-sm bg-white rounded-2xl shadow-2xl border border-stone-200 overflow-hidden">
+        {onClose && (
+          <button type="button" onClick={onClose} aria-label="로그인창 닫기" className="absolute right-3 top-3 z-10 p-1.5 rounded-full text-stone-400 hover:text-stone-700 hover:bg-stone-100">
+            <X className="w-4 h-4" />
+          </button>
+        )}
         <div className="px-6 pt-7 pb-5 text-center border-b border-stone-100">
           <div className="w-14 h-14 mx-auto rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600 text-white flex items-center justify-center shadow-lg">
             <HardHat className="w-7 h-7" strokeWidth={2.4} />
