@@ -8,3 +8,5 @@ coverage/
 !.env.example
 .claude/
 계정.txt
+
+.vercel
