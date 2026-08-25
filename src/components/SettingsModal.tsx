@@ -37,7 +37,7 @@ interface SettingsModalProps {
   onResetBoard: () => void;
 }
 
-type TabId = 'general' | 'board' | 'magnet' | 'account' | 'users' | 'data';
+type TabId = 'general' | 'board' | 'magnet' | 'account' | 'users' | 'data' | 'reset';
 
 const AVATAR_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4'];
 
@@ -256,7 +256,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     { id: 'magnet', label: '모형 기본값', icon: <Palette className="w-3.5 h-3.5" />, visible: true },
     { id: 'account', label: '내 계정', icon: <UserCog className="w-3.5 h-3.5" />, visible: true },
     { id: 'users', label: '계정 관리', icon: <Users className="w-3.5 h-3.5" />, visible: isMaster },
-    { id: 'data', label: '데이터', icon: <Database className="w-3.5 h-3.5" />, visible: true }
+    { id: 'data', label: '데이터', icon: <Database className="w-3.5 h-3.5" />, visible: true },
+    { id: 'reset', label: '대시보드 초기화', icon: <RefreshCw className="w-3.5 h-3.5" />, visible: true }
   ];
 
   return (
@@ -847,29 +848,40 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
               </button>
 
+              <div className="p-3 rounded-xl bg-stone-50 border border-stone-200 text-[11px] text-stone-600 leading-relaxed">
+                로그인한 계정의 보드·배치표·캘린더·설정은 클라우드에 저장됩니다. 비로그인 상태는 해당 브라우저에서만 사용됩니다. 파일 내보내기는 별도 백업용으로 이용하세요.
+              </div>
+            </div>
+          )}
+
+          {/* ------------------------------------------- 대시보드 초기화 */}
+          {tab === 'reset' && (
+            <div className="space-y-4">
+              <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+                <h4 className="text-sm font-extrabold text-amber-900">초기화 후 기본 구성</h4>
+                <ul className="mt-2 space-y-1.5 text-xs text-amber-800 list-disc pl-4">
+                  <li>좌측·우측 넓은 구역 2개</li>
+                  <li>각 구역 최대 수용인원 20명</li>
+                  <li>각 구역에 예시 모형 2개씩(총 4개)</li>
+                  <li>구역과 모형의 입력란은 어떤 내용을 적는지 알 수 있는 예시값으로 구성</li>
+                </ul>
+              </div>
+
+              <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-xs text-rose-700 leading-relaxed">
+                현재 모형·구역·시공기사명단·캘린더 일정이 기본 데이터로 교체됩니다. 초기화 직후에는 Ctrl+Z로 되돌릴 수 있습니다.
+              </div>
+
               <button
                 type="button"
                 onClick={() => {
                   onClose();
                   onResetBoard();
                 }}
-                className="w-full flex items-center gap-3 p-3.5 rounded-xl border border-rose-200 bg-rose-50/50 hover:bg-rose-50 transition-colors text-left"
+                className="w-full flex items-center justify-center gap-2 px-4 py-3 text-sm font-extrabold text-white bg-rose-600 hover:bg-rose-700 rounded-xl shadow-sm transition-colors"
               >
-                <RefreshCw className="w-5 h-5 text-rose-600 shrink-0" />
-                <div className="min-w-0">
-                  <div className="text-sm font-semibold text-rose-800 whitespace-nowrap">
-                    보드 초기화
-                  </div>
-                  <div className="text-[11px] text-rose-600/80">
-                    보드를 기본 데이터로 되돌립니다 (Ctrl+Z 로 되돌리기 가능)
-                  </div>
-                </div>
+                <RefreshCw className="w-4 h-4" />
+                대시보드 초기화 실행
               </button>
-
-              <div className="p-3 rounded-xl bg-stone-50 border border-stone-200 text-[11px] text-stone-600 leading-relaxed">
-                모든 데이터는 이 브라우저에만 저장됩니다. 다른 PC나 다른 브라우저에서는 데이터가 공유되지
-                않으니, 옮기실 때는 [배치표 저장/불러오기] → [파일로 내보내기] 를 이용하세요.
-              </div>
             </div>
           )}
         </div>

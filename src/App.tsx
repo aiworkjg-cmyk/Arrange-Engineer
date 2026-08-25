@@ -111,6 +111,10 @@ const GUEST_USER: UserAccount = {
   avatarColor: '#78716c'
 };
 const createGuestBoard = () => JSON.parse(JSON.stringify(INITIAL_BOARD_STATE)) as BoardState;
+const normalizeSiteSettings = (value?: Partial<SiteSettings>): SiteSettings => ({
+  ...DEFAULT_SITE_SETTINGS,
+  ...(value || {})
+});
 
 export default function App() {
   // 1. 계정 & 로그인 세션
@@ -263,8 +267,9 @@ export default function App() {
       replaceSnapshots(payload.user.id, nextSnapshots);
       setSnapshots(nextSnapshots);
       if (payload.settings) {
-        setSettings(payload.settings);
-        saveSiteSettings(payload.settings);
+        const nextSettings = normalizeSiteSettings(payload.settings);
+        setSettings(nextSettings);
+        saveSiteSettings(nextSettings);
       }
       setCloudReady(true);
     });
@@ -346,8 +351,9 @@ export default function App() {
       setCloudTokenState(payload.token);
       setCloudReady(true);
       if (payload.settings) {
-        setSettings(payload.settings);
-        saveSiteSettings(payload.settings);
+        const nextSettings = normalizeSiteSettings(payload.settings);
+        setSettings(nextSettings);
+        saveSiteSettings(nextSettings);
       }
       const state = payload.state || getBoardStateForUser(payload.user.id);
       const nextSnapshots = payload.snapshots || listSnapshots(payload.user.id);
@@ -1161,6 +1167,7 @@ export default function App() {
       return;
     }
     applyBoard(() => JSON.parse(JSON.stringify(INITIAL_BOARD_STATE)) as BoardState);
+    updateSettings({ boardWidthPercent: 100, boardHeightPercent: 100 });
   };
 
   const handleLocateToken = (tokenId: string) => {
@@ -1213,6 +1220,10 @@ export default function App() {
           onUpdateTokenPositions={handleUpdateTokenPositions}
           onUpdateTokenSize={handleUpdateTokenSize}
           onUpdateZoneRect={handleUpdateZoneRect}
+          onUpdateBoardSize={(width, height) => updateSettings({
+            boardWidthPercent: width,
+            boardHeightPercent: height
+          })}
           onBoardMetricsChange={handleBoardMetricsChange}
           onSelectToken={handleSelectToken}
           onSelectTokenIds={handleSelectTokenIds}

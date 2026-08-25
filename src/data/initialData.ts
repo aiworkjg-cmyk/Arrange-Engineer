@@ -30,7 +30,9 @@ export const DEFAULT_SITE_SETTINGS: SiteSettings = {
   defaultMagnetColor: '#fef08a',
   defaultFontStyle: 'sans',
   confirmOnDelete: true,
-  keepInsideZone: true
+  keepInsideZone: true,
+  boardWidthPercent: 100,
+  boardHeightPercent: 100
 };
 
 export const INITIAL_ZONES: BoardZone[] = [
@@ -38,7 +40,7 @@ export const INITIAL_ZONES: BoardZone[] = [
     id: 'zone-1',
     title: '좌측 구역',
     code: 'LEFT',
-    subtitle: '좌측 작업 배치 구역',
+    subtitle: '현장명 · 공정 · 작업내용을 입력하세요',
     x: 2,
     y: 7,
     width: 47,
@@ -46,14 +48,14 @@ export const INITIAL_ZONES: BoardZone[] = [
     bgColor: 'rgba(239, 246, 255, 0.65)',
     borderColor: '#93c5fd',
     headerColor: '#2563eb',
-    maxCapacity: 30,
-    description: '보드 왼쪽 전체 작업 구역'
+    maxCapacity: 20,
+    description: '구역 설명과 주의사항을 입력하세요'
   },
   {
     id: 'zone-2',
     title: '우측 구역',
     code: 'RIGHT',
-    subtitle: '우측 작업 배치 구역',
+    subtitle: '현장명 · 공정 · 작업내용을 입력하세요',
     x: 51,
     y: 7,
     width: 47,
@@ -61,8 +63,8 @@ export const INITIAL_ZONES: BoardZone[] = [
     bgColor: 'rgba(240, 253, 244, 0.65)',
     borderColor: '#86efac',
     headerColor: '#16a34a',
-    maxCapacity: 30,
-    description: '보드 오른쪽 전체 작업 구역'
+    maxCapacity: 20,
+    description: '구역 설명과 주의사항을 입력하세요'
   }
 ];
 
@@ -499,8 +501,29 @@ void INITIAL_INSTALLER_SOURCE;
 void toInitialInstallerRole;
 void toInitialInstallerStatus;
 
-/** 새 브라우저의 기본 보드는 빈 상태로 시작한다. 기사 원장과 모형은 서로 독립적이다. */
-export const INITIAL_TOKENS: MagnetToken[] = [];
+/** 새 브라우저와 대시보드 초기화에 사용하는 구역별 예시 모형. */
+export const INITIAL_TOKENS: MagnetToken[] = [
+  {
+    id: 'mag-default-left-1', title: '김민수', subtitle: '직책 / 담당업무 입력', phone: '연락처 입력',
+    shape: 'circle', color: '#fef08a', textColor: '#1c1917', size: 'lg', fontStyle: 'sans',
+    x: 16, y: 32, zoneId: 'zone-1', status: 'active', orderNumber: 1, updatedAt: '2026-08-25T00:00:00.000Z'
+  },
+  {
+    id: 'mag-default-left-2', title: '이준호', subtitle: '직책 / 담당업무 입력', phone: '연락처 입력',
+    shape: 'circle', color: '#fef08a', textColor: '#1c1917', size: 'lg', fontStyle: 'sans',
+    x: 34, y: 32, zoneId: 'zone-1', status: 'active', orderNumber: 2, updatedAt: '2026-08-25T00:00:00.000Z'
+  },
+  {
+    id: 'mag-default-right-1', title: '박서준', subtitle: '직책 / 담당업무 입력', phone: '연락처 입력',
+    shape: 'circle', color: '#fef08a', textColor: '#1c1917', size: 'lg', fontStyle: 'sans',
+    x: 66, y: 32, zoneId: 'zone-2', status: 'active', orderNumber: 3, updatedAt: '2026-08-25T00:00:00.000Z'
+  },
+  {
+    id: 'mag-default-right-2', title: '최현우', subtitle: '직책 / 담당업무 입력', phone: '연락처 입력',
+    shape: 'circle', color: '#fef08a', textColor: '#1c1917', size: 'lg', fontStyle: 'sans',
+    x: 84, y: 32, zoneId: 'zone-2', status: 'active', orderNumber: 4, updatedAt: '2026-08-25T00:00:00.000Z'
+  }
+];
 
 /** 마스터(관리자) 계정 - 아이디/비밀번호 모두 'admin' 으로 통일. 로그인 후 변경 가능 */
 export const MASTER_USER_ID = 'u-admin';

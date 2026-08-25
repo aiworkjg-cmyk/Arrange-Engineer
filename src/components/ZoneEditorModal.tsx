@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { BoardZone } from '../types';
-import { X, Layout, Move, Maximize2 } from 'lucide-react';
+import { X, Layout, Maximize2 } from 'lucide-react';
 
 interface ZoneEditorModalProps {
   isOpen: boolean;
@@ -38,9 +38,7 @@ export const ZoneEditorModal: React.FC<ZoneEditorModalProps> = ({
   const [maxCapacity, setMaxCapacity] = useState<number | undefined>(undefined);
   const [selectedTheme, setSelectedTheme] = useState(ZONE_THEMES[0]);
 
-  // 위치 / 크기 (보드 대비 %)
-  const [posX, setPosX] = useState(DEFAULT_RECT.x);
-  const [posY, setPosY] = useState(DEFAULT_RECT.y);
+  // 크기(보드 대비 %). 위치는 보드에서 마우스로만 조정한다.
   const [width, setWidth] = useState(DEFAULT_RECT.width);
   const [height, setHeight] = useState(DEFAULT_RECT.height);
 
@@ -53,18 +51,14 @@ export const ZoneEditorModal: React.FC<ZoneEditorModalProps> = ({
       setSubtitle(zone.subtitle || '');
       setMaxCapacity(zone.maxCapacity);
       setSelectedTheme(ZONE_THEMES.find((t) => t.header === zone.headerColor) || ZONE_THEMES[0]);
-      setPosX(zone.x ?? DEFAULT_RECT.x);
-      setPosY(zone.y ?? DEFAULT_RECT.y);
       setWidth(zone.width ?? DEFAULT_RECT.width);
       setHeight(zone.height ?? DEFAULT_RECT.height);
     } else {
       setTitle('');
       setCode('');
       setSubtitle('');
-      setMaxCapacity(10);
+      setMaxCapacity(20);
       setSelectedTheme(ZONE_THEMES[0]);
-      setPosX(DEFAULT_RECT.x);
-      setPosY(DEFAULT_RECT.y);
       setWidth(DEFAULT_RECT.width);
       setHeight(DEFAULT_RECT.height);
     }
@@ -90,20 +84,19 @@ export const ZoneEditorModal: React.FC<ZoneEditorModalProps> = ({
     }
 
     // 보드 밖으로 벗어나지 않도록 보정한 뒤 저장
-    const safeWidth = clamp(width || MIN_WIDTH, MIN_WIDTH, 100);
-    const safeHeight = clamp(height || MIN_HEIGHT, MIN_HEIGHT, 100);
+    const safeWidth = clamp(Number.isFinite(width) ? width : (zone?.width ?? DEFAULT_RECT.width), MIN_WIDTH, 100);
+    const safeHeight = clamp(Number.isFinite(height) ? height : (zone?.height ?? DEFAULT_RECT.height), MIN_HEIGHT, 100);
+    const safeCapacity = Number.isFinite(maxCapacity) && Number(maxCapacity) > 0 ? Number(maxCapacity) : undefined;
 
     onSave({
       id: zone?.id,
       title: title.trim(),
       code: code.trim() || undefined,
       subtitle: subtitle.trim() || undefined,
-      maxCapacity: maxCapacity ? Number(maxCapacity) : undefined,
+      maxCapacity: safeCapacity,
       bgColor: selectedTheme.bg,
       borderColor: selectedTheme.border,
       headerColor: selectedTheme.header,
-      x: round1(clamp(posX, 0, 100 - safeWidth)),
-      y: round1(clamp(posY, 0, 100 - safeHeight)),
       width: round1(safeWidth),
       height: round1(safeHeight)
     });
@@ -125,7 +118,10 @@ export const ZoneEditorModal: React.FC<ZoneEditorModalProps> = ({
           max={max}
           step={0.5}
           value={value}
-          onChange={(e) => setValue(clamp(Number(e.target.value), min, max))}
+          onChange={(e) => {
+            const parsed = Number(e.target.value);
+            if (Number.isFinite(parsed)) setValue(clamp(parsed, min, max));
+          }}
           className="w-full pl-2.5 pr-6 py-1.5 text-sm rounded-lg border border-stone-300 focus:ring-2 focus:ring-blue-500 focus:outline-none"
         />
         <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] text-stone-400 pointer-events-none">
@@ -203,19 +199,9 @@ export const ZoneEditorModal: React.FC<ZoneEditorModalProps> = ({
             />
           </div>
 
-          {/* 위치 조정 */}
+          {/* 크기 조정 */}
           <div className="p-3 rounded-xl border border-stone-200 bg-stone-50/70 space-y-3">
             <div className="flex items-center gap-1.5 text-xs font-bold text-stone-700 whitespace-nowrap">
-              <Move className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-              <span>위치 조정</span>
-              <span className="font-medium text-[11px] text-stone-400">(보드 왼쪽 상단 기준)</span>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              {numberField('가로 위치 X', posX, setPosX, 0, 100 - MIN_WIDTH)}
-              {numberField('세로 위치 Y', posY, setPosY, 0, 100 - MIN_HEIGHT)}
-            </div>
-
-            <div className="flex items-center gap-1.5 text-xs font-bold text-stone-700 pt-1 whitespace-nowrap">
               <Maximize2 className="w-3.5 h-3.5 text-amber-600 shrink-0" />
               <span>사이즈 조정</span>
               <span className="font-medium text-[11px] text-stone-400">(보드 전체 대비 비율)</span>
@@ -225,23 +211,7 @@ export const ZoneEditorModal: React.FC<ZoneEditorModalProps> = ({
               {numberField('높이 H', height, setHeight, MIN_HEIGHT, 100)}
             </div>
 
-            {/* 미니 미리보기 */}
-            <div className="relative w-full h-24 rounded-lg border border-stone-300 bg-white overflow-hidden">
-              <div
-                style={{
-                  left: `${clamp(posX, 0, 100 - width)}%`,
-                  top: `${clamp(posY, 0, 100 - height)}%`,
-                  width: `${width}%`,
-                  height: `${height}%`,
-                  backgroundColor: selectedTheme.bg,
-                  borderColor: selectedTheme.border
-                }}
-                className="absolute rounded border-2 border-dashed transition-all"
-              />
-              <span className="absolute bottom-1 right-1.5 text-[9px] font-mono text-stone-400">
-                보드 미리보기
-              </span>
-            </div>
+            <p className="text-[11px] text-stone-500">구역 위치는 보드에서 구역 상단을 드래그해 조정하세요.</p>
           </div>
 
           <div>

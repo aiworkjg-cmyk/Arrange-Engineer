@@ -154,6 +154,9 @@ export interface SiteSettings {
   defaultFontStyle: MagnetFontStyle;
   confirmOnDelete: boolean;
   keepInsideZone: boolean;
+  /** 화면 작업영역 대비 화이트보드 크기(%) */
+  boardWidthPercent: number;
+  boardHeightPercent: number;
 }
 
 /** 구역의 위치/크기 (보드 대비 % 단위) */
