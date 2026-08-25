@@ -6,9 +6,9 @@ export type MagnetStatus = 'active' | 'assigned' | 'waiting' | 'break' | 'done';
 
 export type MagnetFontStyle = 'handwriting' | 'sans' | 'dodum';
 
-export type InstallerRole = '팀장' | '사수' | '부사수';
+export type InstallerRole = '' | '팀장' | '사수' | '부사수';
 
-export type InstallerStatus = 'available' | 'assigned' | 'leave' | 'inactive';
+export type InstallerStatus = '' | 'available' | 'assigned' | 'leave' | 'inactive';
 
 /**
  * 시공기사 원장. 보드의 MagnetToken과는 별도로 관리한다.
@@ -73,6 +73,8 @@ export interface BoardZone {
 
 export interface ScheduleItem {
   id: string;
+  /** 기사 일정 또는 저장된 배치표 일정 */
+  kind?: 'installer' | 'layout';
   userId?: string;
   userName: string;
   title: string;
@@ -86,6 +88,8 @@ export interface ScheduleItem {
   status: 'scheduled' | 'in-progress' | 'completed' | 'cancelled';
   location: string;
   notes?: string;
+  snapshotId?: string;
+  snapshotName?: string;
 }
 
 export interface ActivityLog {

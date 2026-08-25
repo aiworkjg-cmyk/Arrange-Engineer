@@ -10,8 +10,9 @@ interface InstallerEditorModalProps {
   onSave: (installer: Partial<InstallerProfile>) => void;
 }
 
-const ROLES: InstallerRole[] = ['팀장', '사수', '부사수'];
+const ROLES: InstallerRole[] = ['', '팀장', '사수', '부사수'];
 const STATUSES: Array<{ id: InstallerStatus; label: string }> = [
+  { id: '', label: '미설정' },
   { id: 'available', label: '배정 가능' },
   { id: 'assigned', label: '배정 중' },
   { id: 'leave', label: '휴무' },
@@ -29,8 +30,8 @@ export const InstallerEditorModal: React.FC<InstallerEditorModalProps> = ({
   onSave
 }) => {
   const [name, setName] = useState('');
-  const [role, setRole] = useState<InstallerRole>('부사수');
-  const [status, setStatus] = useState<InstallerStatus>('available');
+  const [role, setRole] = useState<InstallerRole>('');
+  const [status, setStatus] = useState<InstallerStatus>('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [address, setAddress] = useState('');
@@ -42,8 +43,8 @@ export const InstallerEditorModal: React.FC<InstallerEditorModalProps> = ({
   useEffect(() => {
     if (!isOpen) return;
     setName(installer?.name || '');
-    setRole(installer?.role || '부사수');
-    setStatus(installer?.status || 'available');
+    setRole(installer?.role || '');
+    setStatus(installer?.status || '');
     setPhone(installer?.phone || '');
     setEmail(installer?.email || '');
     setAddress(installer?.address || '');
@@ -116,7 +117,7 @@ export const InstallerEditorModal: React.FC<InstallerEditorModalProps> = ({
               <div>
                 <label className={labelClass}>직책</label>
                 <select value={role} onChange={(event) => setRole(event.target.value as InstallerRole)} className={inputClass}>
-                  {ROLES.map((item) => <option key={item} value={item}>{item}</option>)}
+                  {ROLES.map((item) => <option key={item || 'unset'} value={item}>{item || '미설정'}</option>)}
                 </select>
               </div>
               <div>

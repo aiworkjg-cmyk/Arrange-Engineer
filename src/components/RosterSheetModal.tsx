@@ -25,8 +25,9 @@ interface RosterSheetModalProps {
   onLocateMagnet: (tokenId: string) => void;
 }
 
-const INSTALLER_ROLES: InstallerRole[] = ['팀장', '사수', '부사수'];
+const INSTALLER_ROLES: InstallerRole[] = ['', '팀장', '사수', '부사수'];
 const STATUS_OPTIONS: Array<{ id: InstallerStatus; label: string; className: string }> = [
+  { id: '', label: '미설정', className: 'bg-stone-100 text-stone-500' },
   { id: 'available', label: '배정 가능', className: 'bg-emerald-100 text-emerald-700' },
   { id: 'assigned', label: '배정 중', className: 'bg-blue-100 text-blue-700' },
   { id: 'leave', label: '휴무', className: 'bg-amber-100 text-amber-700' },
@@ -49,8 +50,8 @@ export const RosterSheetModal: React.FC<RosterSheetModalProps> = ({
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [bulkRole, setBulkRole] = useState<InstallerRole>('부사수');
-  const [bulkStatus, setBulkStatus] = useState<InstallerStatus>('available');
+  const [bulkRole, setBulkRole] = useState<InstallerRole>('');
+  const [bulkStatus, setBulkStatus] = useState<InstallerStatus>('');
 
   useEscapeClose(isOpen, onClose);
 
@@ -134,7 +135,7 @@ export const RosterSheetModal: React.FC<RosterSheetModalProps> = ({
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <span className="px-2.5 py-1.5 rounded-lg bg-white border border-stone-200 text-xs font-bold text-stone-700">{selectedIds.length}명 선택</span>
-            <select value={bulkRole} onChange={(event) => setBulkRole(event.target.value as InstallerRole)} className="px-2.5 py-1.5 text-xs rounded-lg border border-stone-300 bg-white">{INSTALLER_ROLES.map((role) => <option key={role} value={role}>{role}</option>)}</select>
+            <select value={bulkRole} onChange={(event) => setBulkRole(event.target.value as InstallerRole)} className="px-2.5 py-1.5 text-xs rounded-lg border border-stone-300 bg-white">{INSTALLER_ROLES.map((role) => <option key={role || 'unset'} value={role}>{role || '직책 미설정'}</option>)}</select>
             <button type="button" disabled={!selectedIds.length} onClick={() => onBulkUpdate(selectedIds, { role: bulkRole })} className="px-3 py-1.5 text-xs font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 disabled:opacity-40 rounded-lg border border-blue-200">직책 일괄 변경</button>
             <select value={bulkStatus} onChange={(event) => setBulkStatus(event.target.value as InstallerStatus)} className="px-2.5 py-1.5 text-xs rounded-lg border border-stone-300 bg-white">{STATUS_OPTIONS.map((status) => <option key={status.id} value={status.id}>{status.label}</option>)}</select>
             <button type="button" disabled={!selectedIds.length} onClick={() => onBulkUpdate(selectedIds, { status: bulkStatus })} className="px-3 py-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 disabled:opacity-40 rounded-lg border border-emerald-200">상태 일괄 변경</button>
@@ -155,11 +156,11 @@ export const RosterSheetModal: React.FC<RosterSheetModalProps> = ({
                   const checked = selectedSet.has(installer.id);
                   const status = STATUS_OPTIONS.find((item) => item.id === installer.status) || STATUS_OPTIONS[0];
                   const magnet = matchingMagnet(installer);
-                  return <tr key={installer.id} className={`transition-colors ${checked ? 'bg-emerald-50' : 'hover:bg-emerald-50/40'}`}>
+                  return <tr key={installer.id} onDoubleClick={(event) => { const target = event.target as HTMLElement; if (!target.closest('button, a, input, select')) onEditInstaller(installer); }} title="기능 버튼이 없는 행 영역을 더블클릭하여 상세 설정" className={`transition-colors ${checked ? 'bg-emerald-50' : 'hover:bg-emerald-50/40'}`}>
                     <td className="py-2.5 px-3 text-center"><button type="button" onClick={() => toggleInstaller(installer.id)} className={`w-5 h-5 rounded border flex items-center justify-center mx-auto ${checked ? 'bg-emerald-600 border-emerald-600 text-white' : 'bg-white border-stone-300'}`}>{checked && <Check className="w-3.5 h-3.5" />}</button></td>
                     <td className="py-2.5 px-3 text-center text-stone-400 font-mono">{index + 1}</td>
                     <td className="py-2.5 px-3 font-bold text-stone-900"><button type="button" onDoubleClick={() => onEditInstaller(installer)} className="hover:text-emerald-700 cursor-default" title="더블클릭하여 상세 설정">{installer.name}</button></td>
-                    <td className="py-2.5 px-3 text-stone-700 font-bold">{installer.role}</td>
+                    <td className="py-2.5 px-3 text-stone-700 font-bold">{installer.role || '미설정'}</td>
                     <td className="py-2.5 px-3 text-stone-600 font-mono">{installer.phone ? <a href={`tel:${installer.phone}`} className="text-blue-600 hover:underline inline-flex items-center gap-1"><Phone className="w-3 h-3" />{installer.phone}</a> : '-'}</td>
                     <td className="py-2.5 px-3 text-stone-600">{installer.email || '-'}</td>
                     <td className="py-2.5 px-3 text-center"><span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${status.className}`}>{status.label}</span></td>

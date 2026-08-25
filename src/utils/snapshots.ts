@@ -29,6 +29,11 @@ function persist(userId: string, snapshots: BoardSnapshot[]): void {
   }
 }
 
+/** 클라우드에서 불러온 배치표 목록으로 로컬 캐시를 교체한다. */
+export function replaceSnapshots(userId: string, snapshots: BoardSnapshot[]): void {
+  persist(userId, Array.isArray(snapshots) ? snapshots : []);
+}
+
 /** 현재 배치표를 새 이름으로 저장 */
 export function saveSnapshot(
   userId: string,

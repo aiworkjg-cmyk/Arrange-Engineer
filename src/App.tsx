@@ -10,7 +10,8 @@ import {
   ZoneRect,
   BoardMetrics,
   SiteSettings,
-  InstallerProfile
+  InstallerProfile,
+  BoardSnapshot
 } from './types';
 import {
   saveActiveUserId,
@@ -39,6 +40,11 @@ import { LayoutLibraryModal } from './components/LayoutLibraryModal';
 import { RosterSheetModal } from './components/RosterSheetModal';
 import { SettingsModal } from './components/SettingsModal';
 import { LoginScreen } from './components/LoginScreen';
+import { listSnapshots, replaceSnapshots } from './utils/snapshots';
+import {
+  createCloudUser, deleteCloudUser, getCloudToken, loadCloud, loginCloud,
+  resetCloudUserPassword, saveCloud, setCloudToken, updateCloudAccount
+} from './utils/cloud';
 
 /* -------------------------------------------------------------------------- */
 /*  되돌리기(Undo) / 다시실행(Redo) 히스토리                                    */
@@ -110,6 +116,8 @@ export default function App() {
   // 1. 계정 & 로그인 세션
   const [users, setUsers] = useState<UserAccount[]>(() => getAllUsers());
   const [sessionUserId, setSessionUserIdState] = useState<string | null>(() => getSessionUserId());
+  const [cloudToken, setCloudTokenState] = useState<string | null>(() => getCloudToken());
+  const [cloudReady, setCloudReady] = useState(() => !getCloudToken());
 
   const isLoggedIn = !!sessionUserId && users.some((u) => u.id === sessionUserId);
   const activeUserId = sessionUserId || GUEST_USER.id;
@@ -117,6 +125,11 @@ export default function App() {
 
   // 2. 사이트 설정
   const [settings, setSettings] = useState<SiteSettings>(() => getSiteSettings());
+  const [snapshots, setSnapshots] = useState<BoardSnapshot[]>(() => listSnapshots(activeUserId));
+
+  useEffect(() => {
+    setSnapshots(listSnapshots(activeUserId));
+  }, [activeUserId]);
 
   const updateSettings = useCallback((patch: Partial<SiteSettings>) => {
     setSettings((prev) => {
@@ -222,6 +235,51 @@ export default function App() {
     saveBoardStateForUser(activeUser.id, boardState);
   }, [boardState, activeUser.id, isLoggedIn]);
 
+  // Vercel 클라우드 세션이 있으면 새 브라우저에서도 같은 계정 데이터를 불러온다.
+  useEffect(() => {
+    if (!cloudToken) return;
+    let cancelled = false;
+    setCloudReady(false);
+    void loadCloud(cloudToken).then((result) => {
+      if (cancelled) return;
+      if (!('data' in result)) {
+        if (!result.unavailable) {
+          setCloudToken(null);
+          setCloudTokenState(null);
+        }
+        setCloudReady(true);
+        return;
+      }
+      const payload = result.data;
+      setUsers(payload.users);
+      saveAllUsers(payload.users);
+      setSessionUserIdState(payload.user.id);
+      setSessionUserId(payload.user.id);
+      saveActiveUserId(payload.user.id);
+      const nextState = payload.state || getBoardStateForUser(payload.user.id);
+      dispatch({ type: 'load', state: nextState });
+      saveBoardStateForUser(payload.user.id, nextState);
+      const nextSnapshots = payload.snapshots || listSnapshots(payload.user.id);
+      replaceSnapshots(payload.user.id, nextSnapshots);
+      setSnapshots(nextSnapshots);
+      if (payload.settings) {
+        setSettings(payload.settings);
+        saveSiteSettings(payload.settings);
+      }
+      setCloudReady(true);
+    });
+    return () => { cancelled = true; };
+  }, [cloudToken]);
+
+  // 보드·캘린더·배치표·설정을 한 묶음으로 계정별 저장한다.
+  useEffect(() => {
+    if (!isLoggedIn || !cloudToken || !cloudReady) return;
+    const timer = window.setTimeout(() => {
+      void saveCloud(cloudToken, boardState, snapshots, settings);
+    }, 1800);
+    return () => window.clearTimeout(timer);
+  }, [boardState, cloudReady, cloudToken, isLoggedIn, settings, snapshots]);
+
   // 대시보드 제목을 브라우저 탭 제목에도 반영
   useEffect(() => {
     document.title = settings.dashboardTitle || '시공기사 배치 대시보드';
@@ -264,18 +322,52 @@ export default function App() {
   }, [boardState.tokens, isAnyModalOpen, selectionAnchorTokenId]);
 
   /* ------------------------------------------------------------ 계정 관리 */
-  const handleLogin = (user: UserAccount) => {
+  const completeLogin = (user: UserAccount, state: BoardState, nextSnapshots: BoardSnapshot[]) => {
     setSessionUserIdState(user.id);
     setSessionUserId(user.id);
     saveActiveUserId(user.id);
-    dispatch({ type: 'load', state: getBoardStateForUser(user.id) });
+    dispatch({ type: 'load', state });
+    replaceSnapshots(user.id, nextSnapshots);
+    setSnapshots(nextSnapshots);
     setSelectedTokenIds([]);
     setSelectionAnchorTokenId(null);
     setSearchFilter('');
     setIsLoginOpen(false);
   };
 
+  const handleLogin = async (loginId: string, password: string): Promise<string | null> => {
+    const result = await loginCloud(loginId, password);
+    if ('data' in result) {
+      const payload = result.data;
+      if (!payload.token) return '클라우드 로그인 토큰을 받지 못했습니다.';
+      setUsers(payload.users);
+      saveAllUsers(payload.users);
+      setCloudToken(payload.token);
+      setCloudTokenState(payload.token);
+      setCloudReady(true);
+      if (payload.settings) {
+        setSettings(payload.settings);
+        saveSiteSettings(payload.settings);
+      }
+      const state = payload.state || getBoardStateForUser(payload.user.id);
+      const nextSnapshots = payload.snapshots || listSnapshots(payload.user.id);
+      completeLogin(payload.user, state, nextSnapshots);
+      return null;
+    }
+    if (!result.unavailable) return result.message;
+
+    // 로컬 개발 서버에서 /api가 없거나 클라우드가 미설정인 경우 기존 로컬 계정으로 동작한다.
+    const target = users.find((user) => (user.loginId || '').toLowerCase() === loginId.trim().toLowerCase());
+    if (!target || (target.password || '') !== password) return '아이디 또는 비밀번호가 올바르지 않습니다.';
+    setCloudReady(true);
+    completeLogin(target, getBoardStateForUser(target.id), listSnapshots(target.id));
+    return null;
+  };
+
   const handleLogout = () => {
+    setCloudToken(null);
+    setCloudTokenState(null);
+    setCloudReady(true);
     setSessionUserIdState(null);
     setSessionUserId(null);
     setIsSettingsOpen(false);
@@ -283,27 +375,63 @@ export default function App() {
     setSelectedTokenIds([]);
   };
 
-  const handleCreateUser = (newUserData: Omit<UserAccount, 'id'>) => {
+  const handleCreateUser = async (newUserData: Omit<UserAccount, 'id'>): Promise<string | null> => {
+    if (cloudToken) {
+      const result = await createCloudUser(cloudToken, newUserData);
+      if (!('data' in result)) return result.message;
+      setUsers(result.data.users);
+      saveAllUsers(result.data.users);
+      return null;
+    }
     const newUser: UserAccount = { ...newUserData, id: `u-${Date.now()}` };
     const updatedUsers = [...users, newUser];
     setUsers(updatedUsers);
     saveAllUsers(updatedUsers);
+    return null;
   };
 
-  const handleDeleteUser = (userId: string) => {
+  const handleDeleteUser = async (userId: string): Promise<string | null> => {
     const target = users.find((u) => u.id === userId);
-    if (!target || target.isMaster || userId === activeUserId) return;
+    if (!target || target.isMaster || userId === activeUserId) return '해당 계정은 삭제할 수 없습니다.';
+
+    if (cloudToken) {
+      const result = await deleteCloudUser(cloudToken, userId);
+      if (!('data' in result)) return result.message;
+      setUsers(result.data.users);
+      saveAllUsers(result.data.users);
+      removeBoardStateForUser(userId);
+      return null;
+    }
 
     const updatedUsers = users.filter((u) => u.id !== userId);
     setUsers(updatedUsers);
     saveAllUsers(updatedUsers);
     removeBoardStateForUser(userId);
+    return null;
   };
 
-  const handleUpdateAccount = (userId: string, patch: Partial<UserAccount>) => {
+  const handleUpdateAccount = async (userId: string, patch: Partial<UserAccount>, currentPassword = ''): Promise<string | null> => {
+    if (cloudToken) {
+      if (userId !== activeUserId) {
+        if (!activeUser.isMaster || !patch.password) return '다른 계정은 마스터만 비밀번호를 초기화할 수 있습니다.';
+        const resetResult = await resetCloudUserPassword(cloudToken, userId, patch.password);
+        if (!('data' in resetResult)) return resetResult.message;
+        setUsers(resetResult.data.users);
+        saveAllUsers(resetResult.data.users);
+        return null;
+      }
+      const result = await updateCloudAccount(cloudToken, currentPassword, patch);
+      if (!('data' in result)) return result.message;
+      setUsers(result.data.users);
+      saveAllUsers(result.data.users);
+      return null;
+    }
+    const target = users.find((user) => user.id === userId);
+    if (!target || (userId === activeUserId && (target.password || '') !== currentPassword)) return '현재 비밀번호가 올바르지 않습니다.';
     const updatedUsers = users.map((u) => (u.id === userId ? { ...u, ...patch } : u));
     setUsers(updatedUsers);
     saveAllUsers(updatedUsers);
+    return null;
   };
 
   /* ------------------------------------------------------- 모형 위치 이동 */
@@ -883,8 +1011,8 @@ export default function App() {
             {
               id: `installer-${Date.now()}`,
               name: installerData.name || '새 시공기사',
-              role: installerData.role || '부사수',
-              status: installerData.status || 'available',
+              role: installerData.role ?? '',
+              status: installerData.status ?? '',
               phone: installerData.phone,
               email: installerData.email,
               address: installerData.address,
@@ -943,6 +1071,7 @@ export default function App() {
     applyBoard((prevState) => {
       const targetZone = prevState.zones[0];
       const statusMap: Record<InstallerProfile['status'], MagnetStatus> = {
+        '': 'assigned',
         available: 'waiting',
         assigned: 'assigned',
         leave: 'break',
@@ -1015,7 +1144,8 @@ export default function App() {
       addActivityLog(
         {
           ...restored,
-          installers: Array.isArray(restored.installers) ? restored.installers : prevState.installers,
+          installers: prevState.installers,
+          schedules: prevState.schedules,
           logs: prevState.logs
         },
         'import',
@@ -1188,6 +1318,7 @@ export default function App() {
         installers={boardState.installers}
         tokens={boardState.tokens}
         zones={boardState.zones}
+        snapshots={snapshots}
         initialTokenId={scheduleFocusTokenId}
         onClose={() => {
           setIsScheduleDrawerOpen(false);
@@ -1197,6 +1328,9 @@ export default function App() {
         onUpdateSchedule={handleUpdateSchedule}
         onDeleteSchedule={handleDeleteSchedule}
         onLocateToken={handleLocateToken}
+        onApplySnapshot={(snapshot) => {
+          handleRestoreState(snapshot.state, snapshot.name);
+        }}
       />
 
       <LayoutLibraryModal
@@ -1206,6 +1340,7 @@ export default function App() {
         state={boardState}
         onClose={() => setIsLayoutLibraryOpen(false)}
         onRestoreState={handleRestoreState}
+        onSnapshotsChange={setSnapshots}
       />
 
       <RosterSheetModal
@@ -1216,12 +1351,10 @@ export default function App() {
         settings={settings}
         onClose={() => setIsRosterModalOpen(false)}
         onAddInstaller={() => {
-          setIsRosterModalOpen(false);
           setEditingInstaller(null);
           setIsInstallerEditorOpen(true);
         }}
         onEditInstaller={(installer) => {
-          setIsRosterModalOpen(false);
           setEditingInstaller(installer);
           setIsInstallerEditorOpen(true);
         }}
@@ -1263,7 +1396,6 @@ export default function App() {
 
       {isLoginOpen && (
         <LoginScreen
-          users={users}
           dashboardTitle={settings.dashboardTitle}
           companyName={settings.companyName}
           onLogin={handleLogin}

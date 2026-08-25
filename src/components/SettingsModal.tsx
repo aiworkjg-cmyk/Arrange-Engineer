@@ -29,9 +29,9 @@ interface SettingsModalProps {
   onClose: () => void;
   onUpdateSettings: (patch: Partial<SiteSettings>) => void;
   onResetSettings: () => void;
-  onCreateUser: (user: Omit<UserAccount, 'id'>) => void;
-  onDeleteUser: (userId: string) => void;
-  onUpdateAccount: (userId: string, patch: Partial<UserAccount>) => void;
+  onCreateUser: (user: Omit<UserAccount, 'id'>) => Promise<string | null>;
+  onDeleteUser: (userId: string) => Promise<string | null>;
+  onUpdateAccount: (userId: string, patch: Partial<UserAccount>, currentPassword?: string) => Promise<string | null>;
   onLogout: () => void;
   onOpenLayoutLibrary: () => void;
   onResetBoard: () => void;
@@ -141,13 +141,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     </button>
   );
 
-  const handleSaveAccount = (e: React.FormEvent) => {
+  const handleSaveAccount = async (e: React.FormEvent) => {
     e.preventDefault();
-
-    if ((activeUser.password || '') !== currentPw) {
-      setNotice({ type: 'error', text: '현재 비밀번호가 올바르지 않습니다.' });
-      return;
-    }
 
     const trimmedId = nextLoginId.trim();
     if (!trimmedId) {
@@ -182,14 +177,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       patch.password = nextPw;
     }
 
-    onUpdateAccount(activeUser.id, patch);
+    const error = await onUpdateAccount(activeUser.id, patch, currentPw);
+    if (error) {
+      setNotice({ type: 'error', text: error });
+      return;
+    }
     setCurrentPw('');
     setNextPw('');
     setConfirmPw('');
     setNotice({ type: 'success', text: '계정 정보가 저장되었습니다.' });
   };
 
-  const handleCreateUser = (e: React.FormEvent) => {
+  const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
     const name = newName.trim();
     const id = newLoginId.trim();
@@ -207,7 +206,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       return;
     }
 
-    onCreateUser({
+    const error = await onCreateUser({
       name,
       email: `${id}@local`,
       role: newRole,
@@ -218,6 +217,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       password: newPw.trim(),
       isMaster: false
     });
+    if (error) {
+      setNotice({ type: 'error', text: error });
+      return;
+    }
 
     setNewName('');
     setNewLoginId('');
@@ -227,7 +230,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     setNotice({ type: 'success', text: `'${name}' 계정이 추가되었습니다.` });
   };
 
-  const handleDeleteUser = (user: UserAccount) => {
+  const handleDeleteUser = async (user: UserAccount) => {
     if (user.isMaster) {
       setNotice({ type: 'error', text: '마스터 계정은 삭제할 수 없습니다.' });
       return;
@@ -239,7 +242,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     if (!window.confirm(`'${user.name}' 계정을 삭제하시겠습니까?\n해당 계정의 보드 데이터도 함께 삭제됩니다.`)) {
       return;
     }
-    onDeleteUser(user.id);
+    const error = await onDeleteUser(user.id);
+    if (error) {
+      setNotice({ type: 'error', text: error });
+      return;
+    }
     setNotice({ type: 'success', text: `'${user.name}' 계정을 삭제했습니다.` });
   };
 
@@ -681,14 +688,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       <div className="flex items-center gap-1 shrink-0">
                         <button
                           type="button"
-                          onClick={() => {
+                          onClick={async () => {
                             const pw = window.prompt(`'${u.name}' 계정의 새 비밀번호를 입력하세요.`, '');
                             if (pw === null) return;
                             if (pw.trim().length < 3) {
                               setNotice({ type: 'error', text: '비밀번호는 3자 이상이어야 합니다.' });
                               return;
                             }
-                            onUpdateAccount(u.id, { password: pw.trim() });
+                            const error = await onUpdateAccount(u.id, { password: pw.trim() });
+                            if (error) {
+                              setNotice({ type: 'error', text: error });
+                              return;
+                            }
                             setNotice({ type: 'success', text: `'${u.name}' 비밀번호를 변경했습니다.` });
                           }}
                           className="p-1.5 text-stone-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"

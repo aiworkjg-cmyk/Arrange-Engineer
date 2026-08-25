@@ -26,92 +26,47 @@ export const DEFAULT_SITE_SETTINGS: SiteSettings = {
   showStatusDot: true,
   showTokenSubtitle: true,
   searchHighlight: 'pulse',
-  defaultMagnetSize: 'md',
-  defaultMagnetColor: '#fef9c3',
-  defaultFontStyle: 'handwriting',
-  confirmOnDelete: false,
+  defaultMagnetSize: 'lg',
+  defaultMagnetColor: '#fef08a',
+  defaultFontStyle: 'sans',
+  confirmOnDelete: true,
   keepInsideZone: true
 };
 
 export const INITIAL_ZONES: BoardZone[] = [
   {
     id: 'zone-1',
-    title: '1구역 (전단 5조)',
-    code: 'A-01',
-    subtitle: '메인 가공 및 전단 라인 (목표 50세트)',
-    x: 8,
-    y: 12,
-    width: 28,
-    height: 38,
+    title: '좌측 구역',
+    code: 'LEFT',
+    subtitle: '좌측 작업 배치 구역',
+    x: 2,
+    y: 7,
+    width: 47,
+    height: 86,
     bgColor: 'rgba(239, 246, 255, 0.65)',
     borderColor: '#93c5fd',
     headerColor: '#2563eb',
-    maxCapacity: 10,
-    description: '오전 8시부터 전단 설비 1~5호기 작업 배정'
+    maxCapacity: 30,
+    description: '보드 왼쪽 전체 작업 구역'
   },
   {
     id: 'zone-2',
-    title: '2구역 (후단 4조)',
-    code: 'B-02',
-    subtitle: '조립 및 정밀 피팅 라인',
-    x: 48,
-    y: 12,
-    width: 44,
-    height: 42,
+    title: '우측 구역',
+    code: 'RIGHT',
+    subtitle: '우측 작업 배치 구역',
+    x: 51,
+    y: 7,
+    width: 47,
+    height: 86,
     bgColor: 'rgba(240, 253, 244, 0.65)',
     borderColor: '#86efac',
     headerColor: '#16a34a',
-    maxCapacity: 12,
-    description: '한샘 A/S 및 모듈 조립 후단 라인'
-  },
-  {
-    id: 'zone-3',
-    title: '3구역 (조립 & 물류 6조)',
-    code: 'C-03',
-    subtitle: '완제품 검수 및 출하 패키징',
-    x: 8,
-    y: 54,
-    width: 36,
-    height: 38,
-    bgColor: 'rgba(254, 243, 199, 0.65)',
-    borderColor: '#fde047',
-    headerColor: '#d97706',
-    maxCapacity: 8,
-    description: '검수 완료 후 화물 상차 및 출하 대기'
-  },
-  {
-    id: 'zone-4',
-    title: 'A/S 및 긴급 출동조',
-    code: 'D-04',
-    subtitle: '광명/수도권 현장 방문 시공',
-    x: 48,
-    y: 58,
-    width: 22,
-    height: 34,
-    bgColor: 'rgba(254, 226, 226, 0.65)',
-    borderColor: '#fca5a5',
-    headerColor: '#dc2626',
-    maxCapacity: 6,
-    description: '시공 1개월 이후 무상/유상 A/S 접수건 처리'
-  },
-  {
-    id: 'zone-5',
-    title: '현장 대기 / 지원조',
-    code: 'WAIT',
-    subtitle: '교대 및 신규 배정 대기',
-    x: 73,
-    y: 58,
-    width: 19,
-    height: 34,
-    bgColor: 'rgba(241, 245, 249, 0.75)',
-    borderColor: '#cbd5e1',
-    headerColor: '#475569',
-    maxCapacity: 8,
-    description: '작업조 교대 및 오후 일정 대기 인원'
+    maxCapacity: 30,
+    description: '보드 오른쪽 전체 작업 구역'
   }
 ];
 
-export const INITIAL_TOKENS: MagnetToken[] = [
+const INITIAL_INSTALLER_SOURCE: MagnetToken[] = [
   // 1구역 전단 5조
   {
     id: 'mag-1',
@@ -534,16 +489,18 @@ const toInitialInstallerStatus = (status: MagnetStatus): InstallerProfile['statu
 };
 
 /** 초기 기사 원장은 기존 샘플 모형을 바탕으로 만들되 이후에는 모형과 독립적으로 저장된다. */
-export const INITIAL_INSTALLERS: InstallerProfile[] = INITIAL_TOKENS.map((token) => ({
-  id: token.assignedUserId || `installer-${token.id}`,
-  name: token.title,
-  role: toInitialInstallerRole(token.subtitle),
-  status: toInitialInstallerStatus(token.status),
-  phone: token.phone,
-  notes: token.notes,
-  createdAt: token.updatedAt,
-  updatedAt: token.updatedAt
-}));
+export const INITIAL_INSTALLERS: InstallerProfile[] = [
+  { id: 'installer-sample-1', name: '홍길동', role: '', status: '', createdAt: '2026-08-25T00:00:00.000Z', updatedAt: '2026-08-25T00:00:00.000Z' },
+  { id: 'installer-sample-2', name: '김철수', role: '', status: '', createdAt: '2026-08-25T00:00:00.000Z', updatedAt: '2026-08-25T00:00:00.000Z' },
+  { id: 'installer-sample-3', name: '이영희', role: '', status: '', createdAt: '2026-08-25T00:00:00.000Z', updatedAt: '2026-08-25T00:00:00.000Z' }
+];
+
+void INITIAL_INSTALLER_SOURCE;
+void toInitialInstallerRole;
+void toInitialInstallerStatus;
+
+/** 새 브라우저의 기본 보드는 빈 상태로 시작한다. 기사 원장과 모형은 서로 독립적이다. */
+export const INITIAL_TOKENS: MagnetToken[] = [];
 
 /** 마스터(관리자) 계정 - 아이디/비밀번호 모두 'admin' 으로 통일. 로그인 후 변경 가능 */
 export const MASTER_USER_ID = 'u-admin';
@@ -639,7 +596,7 @@ export const INITIAL_USERS: UserAccount[] = [
   }
 ];
 
-export const INITIAL_SCHEDULES: ScheduleItem[] = [
+const INITIAL_SCHEDULE_SAMPLES: ScheduleItem[] = [
   {
     id: 'sch-1',
     userId: 'u-kjy',
@@ -740,7 +697,9 @@ export const INITIAL_SCHEDULES: ScheduleItem[] = [
   }
 ];
 
-export const INITIAL_LOGS: ActivityLog[] = [
+export const INITIAL_SCHEDULES: ScheduleItem[] = [];
+
+const INITIAL_LOG_SAMPLES: ActivityLog[] = [
   {
     id: 'log-1',
     timestamp: '2026-08-20 08:30:12',
@@ -780,6 +739,12 @@ export const INITIAL_LOGS: ActivityLog[] = [
     description: '안양 평촌 A/S 긴급 출동 건 접수 및 이동'
   }
 ];
+
+export const INITIAL_LOGS: ActivityLog[] = [];
+
+// 샘플 원본은 기사 초기 데이터의 참고용으로만 유지한다.
+void INITIAL_SCHEDULE_SAMPLES;
+void INITIAL_LOG_SAMPLES;
 
 export const INITIAL_BOARD_STATE: BoardState = {
   version: 2,

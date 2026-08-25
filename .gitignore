@@ -10,3 +10,5 @@ coverage/
 계정.txt
 
 .vercel
+.agents/
+skills-lock.json

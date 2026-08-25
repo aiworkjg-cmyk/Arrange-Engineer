@@ -1,17 +1,14 @@
 import React, { useState } from 'react';
-import { UserAccount } from '../types';
 import { HardHat, LogIn, Eye, EyeOff, AlertTriangle, X } from 'lucide-react';
 
 interface LoginScreenProps {
-  users: UserAccount[];
   dashboardTitle: string;
   companyName: string;
-  onLogin: (user: UserAccount) => void;
+  onLogin: (loginId: string, password: string) => Promise<string | null>;
   onClose?: () => void;
 }
 
 export const LoginScreen: React.FC<LoginScreenProps> = ({
-  users,
   dashboardTitle,
   companyName,
   onLogin,
@@ -21,20 +18,16 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
-    const id = loginId.trim().toLowerCase();
-    const target = users.find((u) => (u.loginId || '').toLowerCase() === id);
-
-    if (!target || (target.password || '') !== password) {
-      setError('아이디 또는 비밀번호가 올바르지 않습니다.');
-      return;
-    }
-
-    onLogin(target);
+    setSubmitting(true);
+    const loginError = await onLogin(loginId.trim(), password);
+    setSubmitting(false);
+    if (loginError) setError(loginError);
   };
 
   return (
@@ -107,10 +100,11 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
 
           <button
             type="submit"
+            disabled={submitting}
             className="w-full py-2.5 mt-1 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-sm transition-all flex items-center justify-center gap-2 whitespace-nowrap"
           >
             <LogIn className="w-4 h-4 shrink-0" />
-            <span>로그인</span>
+            <span>{submitting ? '확인 중...' : '로그인'}</span>
           </button>
         </form>
       </div>

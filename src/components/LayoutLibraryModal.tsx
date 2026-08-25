@@ -34,6 +34,7 @@ interface LayoutLibraryModalProps {
   state: BoardState;
   onClose: () => void;
   onRestoreState: (state: BoardState, label: string) => void;
+  onSnapshotsChange?: (snapshots: BoardSnapshot[]) => void;
 }
 
 export const LayoutLibraryModal: React.FC<LayoutLibraryModalProps> = ({
@@ -42,7 +43,8 @@ export const LayoutLibraryModal: React.FC<LayoutLibraryModalProps> = ({
   activeUser,
   state,
   onClose,
-  onRestoreState
+  onRestoreState,
+  onSnapshotsChange
 }) => {
   const [snapshots, setSnapshots] = useState<BoardSnapshot[]>([]);
   const [name, setName] = useState('');
@@ -66,6 +68,7 @@ export const LayoutLibraryModal: React.FC<LayoutLibraryModalProps> = ({
   const handleSave = () => {
     const next = saveSnapshot(userId, name, state, activeUser.name);
     setSnapshots(next);
+    onSnapshotsChange?.(next);
     setName(defaultSnapshotName());
     setNotice({ type: 'success', text: '현재 배치표를 저장했습니다.' });
   };
@@ -84,18 +87,24 @@ export const LayoutLibraryModal: React.FC<LayoutLibraryModalProps> = ({
 
   const handleOverwrite = (snapshot: BoardSnapshot) => {
     if (!window.confirm(`'${snapshot.name}' 에 현재 배치표를 덮어쓰시겠습니까?`)) return;
-    setSnapshots(overwriteSnapshot(userId, snapshot.id, state, activeUser.name));
+    const next = overwriteSnapshot(userId, snapshot.id, state, activeUser.name);
+    setSnapshots(next);
+    onSnapshotsChange?.(next);
     setNotice({ type: 'success', text: `'${snapshot.name}' 에 덮어썼습니다.` });
   };
 
   const handleDelete = (snapshot: BoardSnapshot) => {
     if (!window.confirm(`'${snapshot.name}' 배치표를 삭제하시겠습니까?`)) return;
-    setSnapshots(deleteSnapshot(userId, snapshot.id));
+    const next = deleteSnapshot(userId, snapshot.id);
+    setSnapshots(next);
+    onSnapshotsChange?.(next);
     setNotice({ type: 'success', text: '배치표를 삭제했습니다.' });
   };
 
   const commitRename = (snapshot: BoardSnapshot) => {
-    setSnapshots(renameSnapshot(userId, snapshot.id, editingName));
+    const next = renameSnapshot(userId, snapshot.id, editingName);
+    setSnapshots(next);
+    onSnapshotsChange?.(next);
     setEditingId(null);
   };
 
