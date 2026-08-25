@@ -1167,7 +1167,6 @@ export default function App() {
       return;
     }
     applyBoard(() => JSON.parse(JSON.stringify(INITIAL_BOARD_STATE)) as BoardState);
-    updateSettings({ boardWidthPercent: 100, boardHeightPercent: 100 });
   };
 
   const handleLocateToken = (tokenId: string) => {
@@ -1220,10 +1219,6 @@ export default function App() {
           onUpdateTokenPositions={handleUpdateTokenPositions}
           onUpdateTokenSize={handleUpdateTokenSize}
           onUpdateZoneRect={handleUpdateZoneRect}
-          onUpdateBoardSize={(width, height) => updateSettings({
-            boardWidthPercent: width,
-            boardHeightPercent: height
-          })}
           onBoardMetricsChange={handleBoardMetricsChange}
           onSelectToken={handleSelectToken}
           onSelectTokenIds={handleSelectTokenIds}

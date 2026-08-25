@@ -113,7 +113,7 @@ Vercel 대시보드에서 **Storage** 또는 **Integrations** → `upstash-kv-or
 
 로그인한 계정별로 다음 내용을 하나의 데이터 묶음으로 저장합니다.
 
-- 흰색 배경판 크기와 사이트 설정
+- 사이트 표시 설정
 - 구역·모형·시공기사 명단
 - 캘린더 일정
 - 저장한 배치표
@@ -207,4 +207,3 @@ Hobby는 **개인·비상업용** 제한이 있습니다. 회사 업무 서비�
 - [Vercel 프로젝트 설정](https://vercel.com/docs/project-configuration/project-settings)
 - [Vercel Marketplace 저장소](https://vercel.com/docs/marketplace-storage)
 - [Upstash Redis 요금·한도](https://upstash.com/pricing/redis)
-

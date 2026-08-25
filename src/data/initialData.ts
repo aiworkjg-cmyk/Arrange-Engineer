@@ -30,9 +30,7 @@ export const DEFAULT_SITE_SETTINGS: SiteSettings = {
   defaultMagnetColor: '#fef08a',
   defaultFontStyle: 'sans',
   confirmOnDelete: true,
-  keepInsideZone: true,
-  boardWidthPercent: 100,
-  boardHeightPercent: 100
+  keepInsideZone: true
 };
 
 export const INITIAL_ZONES: BoardZone[] = [

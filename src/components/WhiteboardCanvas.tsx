@@ -17,7 +17,6 @@ interface WhiteboardCanvasProps {
   ) => void;
   onUpdateTokenSize: (tokenId: string, sizePx: number) => void;
   onUpdateZoneRect: (zoneId: string, rect: ZoneRect, mode: 'move' | 'resize') => void;
-  onUpdateBoardSize: (widthPercent: number, heightPercent: number) => void;
   onBoardMetricsChange: (metrics: BoardMetrics) => void;
   onSelectToken: (token: MagnetToken | null, additive?: boolean) => void;
   onSelectTokenIds: (tokenIds: string[]) => void;
@@ -42,21 +41,6 @@ const MIN_ZONE_WIDTH = 10;
 const MIN_ZONE_HEIGHT = 12;
 const TOKEN_MARGIN = 3;
 const DRAG_THRESHOLD_PX = 3;
-const MIN_BOARD_PERCENT = 70;
-const MAX_BOARD_PERCENT = 240;
-const BOARD_MARGIN_PX = 24;
-const BOARD_RESIZE_SENSITIVITY = 4;
-
-type BoardResizeHandle = 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw';
-
-interface BoardResizeSession {
-  pointerId: number;
-  handle: BoardResizeHandle;
-  originClientX: number;
-  originClientY: number;
-  startWidthPercent: number;
-  startHeightPercent: number;
-}
 
 type DragSession =
   | {
@@ -116,17 +100,6 @@ interface SelectionBox {
 const round1 = (n: number) => Number(n.toFixed(1));
 const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n));
 
-const BOARD_RESIZE_HANDLES: Array<{ id: BoardResizeHandle; className: string; label: string }> = [
-  { id: 'n', className: 'top-0 left-5 right-5 h-2 cursor-ns-resize', label: '위쪽 가장자리' },
-  { id: 's', className: 'bottom-0 left-5 right-5 h-2 cursor-ns-resize', label: '아래쪽 가장자리' },
-  { id: 'e', className: 'right-0 top-5 bottom-5 w-2 cursor-ew-resize', label: '오른쪽 가장자리' },
-  { id: 'w', className: 'left-0 top-5 bottom-5 w-2 cursor-ew-resize', label: '왼쪽 가장자리' },
-  { id: 'ne', className: 'right-0 top-0 w-5 h-5 cursor-nesw-resize', label: '오른쪽 위 모서리' },
-  { id: 'nw', className: 'left-0 top-0 w-5 h-5 cursor-nwse-resize', label: '왼쪽 위 모서리' },
-  { id: 'se', className: 'right-0 bottom-0 w-5 h-5 cursor-nwse-resize', label: '오른쪽 아래 모서리' },
-  { id: 'sw', className: 'left-0 bottom-0 w-5 h-5 cursor-nesw-resize', label: '왼쪽 아래 모서리' }
-];
-
 export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
   tokens,
   zones,
@@ -137,7 +110,6 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
   onUpdateTokenPositions,
   onUpdateTokenSize,
   onUpdateZoneRect,
-  onUpdateBoardSize,
   onBoardMetricsChange,
   onSelectToken,
   onSelectTokenIds,
@@ -158,12 +130,6 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
 }) => {
   const canvasRef = useRef<HTMLDivElement>(null);
   const boardRef = useRef<HTMLDivElement>(null);
-
-  // 흰색 배경판 선택 / 가장자리 크기 조절
-  const [isBoardActive, setIsBoardActive] = useState(false);
-  const boardResizeSessionRef = useRef<BoardResizeSession | null>(null);
-  const [boardSizePreview, setBoardSizePreview] = useState<{ width: number; height: number } | null>(null);
-  const [isBoardResizing, setIsBoardResizing] = useState(false);
 
   // 배경은 고정하고, 빈 영역 드래그는 모형 다중 선택에 사용한다.
   const selectionSessionRef = useRef<SelectionSession | null>(null);
@@ -203,69 +169,6 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
     if (!rect || rect.width === 0 || rect.height === 0) return { dx: 0, dy: 0 };
     return { dx: (dxPx / rect.width) * 100, dy: (dyPx / rect.height) * 100 };
   }, []);
-
-  const beginBoardResize = (e: React.PointerEvent, handle: BoardResizeHandle) => {
-    if (e.button !== 0 && e.pointerType === 'mouse') return;
-    e.preventDefault();
-    e.stopPropagation();
-    const startWidthPercent = clamp(settings.boardWidthPercent || 100, MIN_BOARD_PERCENT, MAX_BOARD_PERCENT);
-    const startHeightPercent = clamp(settings.boardHeightPercent || 100, MIN_BOARD_PERCENT, MAX_BOARD_PERCENT);
-    boardResizeSessionRef.current = {
-      pointerId: e.pointerId,
-      handle,
-      originClientX: e.clientX,
-      originClientY: e.clientY,
-      startWidthPercent,
-      startHeightPercent
-    };
-    setBoardSizePreview({ width: startWidthPercent, height: startHeightPercent });
-    setIsBoardActive(true);
-    setIsBoardResizing(true);
-  };
-
-  useEffect(() => {
-    if (!isBoardResizing) return;
-
-    const computeSize = (session: BoardResizeSession, clientX: number, clientY: number) => {
-      const canvas = canvasRef.current;
-      if (!canvas) return { width: session.startWidthPercent, height: session.startHeightPercent };
-      const dx = ((clientX - session.originClientX) / Math.max(canvas.clientWidth, 1)) * 100 * BOARD_RESIZE_SENSITIVITY;
-      const dy = ((clientY - session.originClientY) / Math.max(canvas.clientHeight, 1)) * 100 * BOARD_RESIZE_SENSITIVITY;
-      const horizontalDirection = session.handle.includes('e') ? 1 : session.handle.includes('w') ? -1 : 0;
-      const verticalDirection = session.handle.includes('s') ? 1 : session.handle.includes('n') ? -1 : 0;
-      return {
-        width: round1(clamp(session.startWidthPercent + dx * horizontalDirection, MIN_BOARD_PERCENT, MAX_BOARD_PERCENT)),
-        height: round1(clamp(session.startHeightPercent + dy * verticalDirection, MIN_BOARD_PERCENT, MAX_BOARD_PERCENT))
-      };
-    };
-
-    const handleMove = (e: PointerEvent) => {
-      const session = boardResizeSessionRef.current;
-      if (!session || e.pointerId !== session.pointerId) return;
-      setBoardSizePreview(computeSize(session, e.clientX, e.clientY));
-    };
-
-    const finish = (e: PointerEvent) => {
-      const session = boardResizeSessionRef.current;
-      if (!session || e.pointerId !== session.pointerId) return;
-      if (e.type !== 'pointercancel') {
-        const next = computeSize(session, e.clientX, e.clientY);
-        onUpdateBoardSize(next.width, next.height);
-      }
-      boardResizeSessionRef.current = null;
-      setBoardSizePreview(null);
-      setIsBoardResizing(false);
-    };
-
-    window.addEventListener('pointermove', handleMove);
-    window.addEventListener('pointerup', finish);
-    window.addEventListener('pointercancel', finish);
-    return () => {
-      window.removeEventListener('pointermove', handleMove);
-      window.removeEventListener('pointerup', finish);
-      window.removeEventListener('pointercancel', finish);
-    };
-  }, [isBoardResizing, onUpdateBoardSize]);
 
   // ---------------------------------------------------------------- 드래그 시작
   const beginTokenDrag = (e: React.PointerEvent, token: MagnetToken) => {
@@ -485,10 +388,6 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
   // ---------------------------------------------------------- 배경 드래그 선택
   const handleCanvasPointerDown = (e: React.PointerEvent) => {
     const target = e.target as HTMLElement;
-    const isBoardSurface =
-      target === boardRef.current ||
-      target.classList.contains('whiteboard-surface') ||
-      target.classList.contains('whiteboard-surface-plain');
     const isBackground =
       target === canvasRef.current ||
       target === boardRef.current ||
@@ -497,8 +396,6 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
       target.classList.contains('whiteboard-surface-plain');
 
     if (!isBackground || e.button !== 0) return;
-
-    setIsBoardActive(isBoardSurface);
 
     e.preventDefault();
     const canvasRect = canvasRef.current?.getBoundingClientRect();
@@ -513,8 +410,8 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
       initialSelection: selectedTokenIds
     };
     setSelectionBox({
-      left: e.clientX - canvasRect.left + (canvasRef.current?.scrollLeft || 0),
-      top: e.clientY - canvasRect.top + (canvasRef.current?.scrollTop || 0),
+      left: e.clientX - canvasRect.left,
+      top: e.clientY - canvasRect.top,
       width: 0,
       height: 0
     });
@@ -531,8 +428,8 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
       if (!canvasRect) return;
 
       setSelectionBox({
-        left: Math.min(session.originClientX, e.clientX) - canvasRect.left + (canvasRef.current?.scrollLeft || 0),
-        top: Math.min(session.originClientY, e.clientY) - canvasRect.top + (canvasRef.current?.scrollTop || 0),
+        left: Math.min(session.originClientX, e.clientX) - canvasRect.left,
+        top: Math.min(session.originClientY, e.clientY) - canvasRect.top,
         width: Math.abs(e.clientX - session.originClientX),
         height: Math.abs(e.clientY - session.originClientY)
       });
@@ -613,12 +510,6 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
   const matchCount = isSearching ? tokens.filter(matchesSearch).length : 0;
 
   const activeZoneId = preview?.kind === 'zone' ? preview.id : null;
-  const boardWidthPercent = boardSizePreview?.width ?? clamp(settings.boardWidthPercent || 100, MIN_BOARD_PERCENT, MAX_BOARD_PERCENT);
-  const boardHeightPercent = boardSizePreview?.height ?? clamp(settings.boardHeightPercent || 100, MIN_BOARD_PERCENT, MAX_BOARD_PERCENT);
-  const boardWidthOffset = round1(BOARD_MARGIN_PX * 2 * boardWidthPercent / 100);
-  const boardHeightOffset = round1(BOARD_MARGIN_PX * 2 * boardHeightPercent / 100);
-  const scrollWidthOffset = boardWidthPercent > 100 ? round1(boardWidthOffset - BOARD_MARGIN_PX * 2) : 0;
-  const scrollHeightOffset = boardHeightPercent > 100 ? round1(boardHeightOffset - BOARD_MARGIN_PX * 2) : 0;
 
   return (
     <div className="relative flex-1 w-full h-full overflow-hidden bg-stone-200/90 flex flex-col select-none">
@@ -653,30 +544,20 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
       <div
         ref={canvasRef}
         onPointerDown={handleCanvasPointerDown}
-        className={`whiteboard-bg custom-scrollbar flex-1 w-full h-full overflow-auto relative ${
+        className={`whiteboard-bg flex-1 w-full h-full overflow-hidden relative ${
           isSelecting ? 'cursor-crosshair' : 'cursor-default'
         }`}
         style={{ touchAction: 'none' }}
       >
         <div
-          aria-hidden="true"
-          className="pointer-events-none"
-          style={{
-            width: boardWidthPercent > 100 ? `calc(${boardWidthPercent}% - ${scrollWidthOffset}px)` : '100%',
-            height: boardHeightPercent > 100 ? `calc(${boardHeightPercent}% - ${scrollHeightOffset}px)` : '100%'
-          }}
-        />
-        <div
           ref={boardRef}
           style={{
-            width: `calc(${boardWidthPercent}% - ${boardWidthOffset}px)`,
-            height: `calc(${boardHeightPercent}% - ${boardHeightOffset}px)`
+            width: '100%',
+            height: '100%'
           }}
-          className={`absolute left-6 right-6 top-6 bottom-6 m-auto ${
+          className={`absolute inset-0 m-auto ${
             settings.showGrid ? 'whiteboard-surface' : 'whiteboard-surface-plain'
-          } rounded-2xl border-[10px] shadow-2xl overflow-hidden transition-[box-shadow,border-color] ${
-            isBoardActive ? 'border-amber-400 ring-4 ring-amber-300/60' : 'border-stone-300'
-          }`}
+          } rounded-2xl border-[10px] border-stone-300 shadow-2xl overflow-hidden`}
         >
           <div className="absolute top-2 left-4 text-xs font-bold text-stone-400/80 tracking-widest uppercase select-none pointer-events-none flex items-center gap-2 whitespace-nowrap">
             <span className="w-2 h-2 rounded-full bg-stone-300 inline-block" />
@@ -746,22 +627,6 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
             );
           })}
 
-          {isBoardActive && BOARD_RESIZE_HANDLES.map((handle) => (
-            <button
-              key={handle.id}
-              type="button"
-              aria-label={`${handle.label} 드래그로 배경판 크기 조절`}
-              title={`${handle.label} 드래그로 배경판 크기 조절`}
-              onPointerDown={(event) => beginBoardResize(event, handle.id)}
-              className={`absolute z-50 pointer-events-auto bg-amber-400/80 hover:bg-amber-500 ${handle.className}`}
-            />
-          ))}
-
-          {isBoardActive && (
-            <div className="absolute z-40 top-3 right-3 pointer-events-none rounded-lg bg-amber-500 px-2.5 py-1 text-[11px] font-extrabold text-white shadow-md">
-              배경판 선택됨 · {boardWidthPercent}% × {boardHeightPercent}%
-            </div>
-          )}
         </div>
 
         {selectionBox && (

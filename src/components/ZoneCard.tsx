@@ -124,7 +124,7 @@ export const ZoneCardComponent: React.FC<ZoneCardProps> = ({
               onEditZone(zone);
             }}
             className="p-1 text-stone-500 hover:text-amber-600 hover:bg-amber-50 rounded transition-colors"
-            title="구역 설정 수정 (이름/위치/크기)"
+            title="구역 설정 수정 (이름/설명/색상/수용 정원)"
           >
             <Edit className="w-3.5 h-3.5" />
           </button>
