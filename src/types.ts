@@ -42,6 +42,8 @@ export interface MagnetToken {
   size: MagnetSize;
   /** 가장자리 드래그로 조절한 실제 지름(px). 없으면 size 프리셋을 따른다. */
   sizePx?: number;
+  /** 구역의 가로 배율과 함께 조절된 실제 너비(px). 없으면 모형 형태의 기본 비율을 따른다. */
+  widthPx?: number;
   x: number; // percentage (0 - 100) or px based on canvas
   y: number; // percentage (0 - 100) or px based on canvas
   zoneId?: string;

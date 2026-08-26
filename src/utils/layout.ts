@@ -10,6 +10,9 @@ export const SIZE_PRESET_PX: Record<MagnetSize, number> = {
 
 export const MIN_TOKEN_PX = 36;
 export const MAX_TOKEN_PX = 170;
+/** 구역과 함께 축소된 모형은 수동 조절 하한보다 작아질 수 있다. */
+const MIN_RENDERED_TOKEN_PX = 0.5;
+const MAX_RENDERED_TOKEN_PX = 10000;
 
 /**
  * 보드의 고정 논리 크기(px).
@@ -47,11 +50,14 @@ const round1 = (n: number) => Number(n.toFixed(1));
 /** 모형의 실제 지름(px) */
 export function getTokenSizePx(token: Pick<MagnetToken, 'size' | 'sizePx'>): number {
   const raw = token.sizePx ?? SIZE_PRESET_PX[token.size] ?? SIZE_PRESET_PX.md;
-  return clamp(raw, MIN_TOKEN_PX, MAX_TOKEN_PX);
+  return clamp(raw, MIN_RENDERED_TOKEN_PX, MAX_RENDERED_TOKEN_PX);
 }
 
 /** 가로로 긴 형태(라운드 사각 / 타원)는 폭이 1.3배 */
-export function getTokenWidthPx(token: Pick<MagnetToken, 'size' | 'sizePx' | 'shape'>): number {
+export function getTokenWidthPx(token: Pick<MagnetToken, 'size' | 'sizePx' | 'widthPx' | 'shape'>): number {
+  if (typeof token.widthPx === 'number' && Number.isFinite(token.widthPx)) {
+    return clamp(token.widthPx, MIN_RENDERED_TOKEN_PX, MAX_RENDERED_TOKEN_PX);
+  }
   const base = getTokenSizePx(token);
   return token.shape === 'rounded-rect' || token.shape === 'pill' ? base * 1.3 : base;
 }
@@ -114,32 +120,28 @@ export function clampTokenToZone(
 }
 
 /**
- * 구역 크기가 바뀔 때, 모형이 "구역 안에서의 상대 위치"를 그대로 유지하도록 좌표를 다시 계산한다.
- * 구역을 늘리면 모형 간격도 같은 비율로 벌어지고, 줄이면 같은 비율로 좁혀진다.
- * (헤더/테두리를 뺀 안전 영역 기준이라 제목 위로 올라가지 않는다)
+ * 구역 크기가 바뀔 때 모형의 위치와 가로·세로 크기를 구역에 대한 동일한 비율로 변환한다.
+ * 안전 영역 보정이나 최소 모형 크기를 적용하지 않아 반복 확대/축소에도 상대 비율이 깨지지 않는다.
  */
 export function remapTokenIntoResizedZone(
-  token: Pick<MagnetToken, 'size' | 'sizePx' | 'shape'>,
+  token: Pick<MagnetToken, 'size' | 'sizePx' | 'widthPx' | 'shape'>,
   previousZone: BoardZone,
   nextZone: BoardZone,
-  metrics: BoardMetrics,
+  _metrics: BoardMetrics,
   x: number,
   y: number
-): { x: number; y: number } {
-  const before = getZoneSafeArea(previousZone, metrics);
-  const after = getZoneSafeArea(nextZone, metrics);
+): { x: number; y: number; sizePx: number; widthPx: number } {
+  const ratioX = previousZone.width > 0 ? (x - previousZone.x) / previousZone.width : 0.5;
+  const ratioY = previousZone.height > 0 ? (y - previousZone.y) / previousZone.height : 0.5;
+  const widthScale = previousZone.width > 0 ? nextZone.width / previousZone.width : 1;
+  const heightScale = previousZone.height > 0 ? nextZone.height / previousZone.height : 1;
 
-  // 이전 안전 영역 안에서의 비율 위치 (0~1)
-  const ratioX = before.width > 0 ? (x - before.left) / before.width : 0.5;
-  const ratioY = before.height > 0 ? (y - before.top) / before.height : 0.5;
-
-  return clampTokenToZone(
-    token,
-    nextZone,
-    metrics,
-    after.left + ratioX * after.width,
-    after.top + ratioY * after.height
-  );
+  return {
+    x: Number((nextZone.x + ratioX * nextZone.width).toFixed(6)),
+    y: Number((nextZone.y + ratioY * nextZone.height).toFixed(6)),
+    widthPx: Number((getTokenWidthPx(token) * widthScale).toFixed(6)),
+    sizePx: Number((getTokenSizePx(token) * heightScale).toFixed(6))
+  };
 }
 
 /**

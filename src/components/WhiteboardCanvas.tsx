@@ -21,7 +21,8 @@ import {
   ZoomOut,
   Maximize2,
   Hand,
-  Expand
+  Expand,
+  Minimize2
 } from 'lucide-react';
 
 interface WhiteboardCanvasProps {
@@ -887,8 +888,8 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
           )}
         </div>
 
-        {/* 확대/축소 컨트롤 - 대시보드 전용 보기에서는 모든 UI를 감춘다 */}
-        {!isBoardOnly && <div className="pointer-events-auto flex items-center gap-0.5 backdrop-blur-md rounded-xl shrink-0 ml-auto bg-white/90 p-1 border border-stone-200 shadow-md">
+        {/* 전체 보기에서도 모바일 복귀와 화면 조절을 위해 우측 컨트롤은 유지한다. */}
+        <div className="pointer-events-auto flex items-center gap-0.5 backdrop-blur-md rounded-xl shrink-0 ml-auto bg-white/90 p-1 border border-stone-200 shadow-md">
           <button
             type="button"
             onClick={() => zoomAt(zoom / 1.2)}
@@ -932,12 +933,12 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
           <button
             type="button"
             onClick={onToggleBoardOnly}
-            className="p-1.5 rounded-lg transition-colors text-stone-600 hover:text-blue-600 hover:bg-blue-50"
-            title="대시보드만 보기 (종료: ESC)"
+            className={`p-1.5 rounded-lg transition-colors ${isBoardOnly ? 'bg-blue-600 text-white hover:bg-blue-700' : 'text-stone-600 hover:text-blue-600 hover:bg-blue-50'}`}
+            title={isBoardOnly ? '전체 보기 종료 · 메뉴 다시 보기' : '대시보드만 보기'}
           >
-            <Expand className="w-3.5 h-3.5" />
+            {isBoardOnly ? <Minimize2 className="w-3.5 h-3.5" /> : <Expand className="w-3.5 h-3.5" />}
           </button>
-        </div>}
+        </div>
       </div>
 
       {/* 보드 영역 (배경 고정) */}

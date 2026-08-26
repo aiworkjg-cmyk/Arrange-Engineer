@@ -81,7 +81,7 @@ export const MagnetTokenComponent: React.FC<MagnetTokenProps> = ({
 
   const sizePx = previewSizePx ?? getTokenSizePx(token);
   const widthPx = previewSizePx
-    ? getTokenWidthPx({ ...token, sizePx: previewSizePx })
+    ? getTokenWidthPx({ ...token, sizePx: previewSizePx, widthPx: undefined })
     : getTokenWidthPx(token);
 
   // 크기에 맞춰 글자 크기를 자동 조절

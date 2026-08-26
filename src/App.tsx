@@ -535,10 +535,11 @@ export default function App() {
     (tokenId: string, sizePx: number) => {
       applyBoard((prevState) => {
         const token = prevState.tokens.find((t) => t.id === tokenId);
-        if (!token || getTokenSizePx(token) === sizePx) return prevState;
+        if (!token || (getTokenSizePx(token) === sizePx && token.widthPx === undefined)) return prevState;
 
         const zone = prevState.zones.find((z) => z.id === token.zoneId);
-        const resized = { ...token, sizePx };
+        // 사용자가 모형 자체의 크기를 다시 조절하면 형태의 기본 가로세로 비율로 돌아간다.
+        const resized = { ...token, sizePx, widthPx: undefined };
 
         // 커진 모형이 구역 밖으로 삐져나오지 않게 위치도 함께 보정
         const fitted =
@@ -600,11 +601,12 @@ export default function App() {
           if (t.zoneId !== zoneId) return t;
 
           if (mode === 'move') {
-            const moved = { x: clamp(t.x + dx, 3, 97), y: clamp(t.y + dy, 3, 97) };
-            const fitted = settings.keepInsideZone
-              ? clampTokenToZone(t, updatedZone, boardMetricsRef.current, moved.x, moved.y)
-              : { x: round1(moved.x), y: round1(moved.y) };
-            return { ...t, x: fitted.x, y: fitted.y };
+            // 구역 자체가 보드 안으로 제한되므로 모형에도 같은 이동량만 더해야 상대 위치가 유지된다.
+            return {
+              ...t,
+              x: Number((t.x + dx).toFixed(6)),
+              y: Number((t.y + dy).toFixed(6))
+            };
           }
 
           const remapped = remapTokenIntoResizedZone(
@@ -615,7 +617,7 @@ export default function App() {
             t.x,
             t.y
           );
-          return { ...t, x: remapped.x, y: remapped.y };
+          return { ...t, ...remapped };
         });
 
         return addActivityLog(
@@ -629,7 +631,7 @@ export default function App() {
         );
       });
     },
-    [applyBoard, activeUser, settings.keepInsideZone]
+    [applyBoard, activeUser]
   );
 
   /* -------------------------------------------------------- 모형 상태 변경 */
@@ -677,6 +679,13 @@ export default function App() {
             updatedAt: new Date().toISOString(),
             updatedBy: activeUser.name
           } as MagnetToken;
+          // 이름·색상만 수정한 경우에는 구역 조절로 만들어진 가로 비율을 보존한다.
+          if (
+            tokenData.sizePx !== undefined &&
+            Math.abs(tokenData.sizePx - getTokenSizePx(t)) > 0.0001
+          ) {
+            merged.widthPx = undefined;
+          }
 
           const targetZone = prevState.zones.find((z) => z.id === tokenData.zoneId);
 
@@ -780,6 +789,7 @@ export default function App() {
           updatedAt: now,
           updatedBy: activeUser.name
         };
+        if (patch.sizePx !== undefined) merged.widthPx = undefined;
         const zone = prevState.zones.find((item) => item.id === merged.zoneId);
         if (zone && settings.keepInsideZone) {
           const fitted = clampTokenToZone(
@@ -883,17 +893,34 @@ export default function App() {
 
       if (zoneData.id) {
         const zoneId = zoneData.id;
+        const previousZone = prevState.zones.find((z) => z.id === zoneId);
         const merged = prevState.zones.map((z) =>
           z.id === zoneId ? ({ ...z, ...zoneData } as BoardZone) : z
         );
         updatedZones = merged;
 
         const updatedZone = merged.find((z) => z.id === zoneId);
-        if (updatedZone && settings.keepInsideZone) {
+        const geometryChanged =
+          previousZone &&
+          updatedZone &&
+          (previousZone.x !== updatedZone.x ||
+            previousZone.y !== updatedZone.y ||
+            previousZone.width !== updatedZone.width ||
+            previousZone.height !== updatedZone.height);
+        if (previousZone && updatedZone && geometryChanged) {
           updatedTokens = prevState.tokens.map((t) => {
             if (t.zoneId !== zoneId) return t;
-            const fitted = clampTokenToZone(t, updatedZone, boardMetricsRef.current, t.x, t.y);
-            return { ...t, x: fitted.x, y: fitted.y };
+            return {
+              ...t,
+              ...remapTokenIntoResizedZone(
+                t,
+                previousZone,
+                updatedZone,
+                boardMetricsRef.current,
+                t.x,
+                t.y
+              )
+            };
           });
         }
       } else {
@@ -939,16 +966,36 @@ export default function App() {
         const height = clamp(patch.height ?? zone.height, 12, 100 - zone.y);
         return { ...zone, ...patch, width, height } as BoardZone;
       });
+      const previousZoneMap = new Map<string, BoardZone>(
+        prevState.zones.map((zone) => [zone.id, zone])
+      );
       const zoneMap = new Map<string, BoardZone>(updatedZones.map((zone) => [zone.id, zone]));
-      const updatedTokens = settings.keepInsideZone
-        ? prevState.tokens.map((token) => {
-            if (!token.zoneId || !selectedIds.has(token.zoneId)) return token;
-            const zone = zoneMap.get(token.zoneId);
-            if (!zone) return token;
-            const fitted = clampTokenToZone(token, zone, boardMetricsRef.current, token.x, token.y);
-            return { ...token, x: fitted.x, y: fitted.y };
-          })
-        : prevState.tokens;
+      const updatedTokens = prevState.tokens.map((token) => {
+        if (!token.zoneId || !selectedIds.has(token.zoneId)) return token;
+        const previousZone = previousZoneMap.get(token.zoneId);
+        const nextZone = zoneMap.get(token.zoneId);
+        if (
+          !previousZone ||
+          !nextZone ||
+          (previousZone.x === nextZone.x &&
+            previousZone.y === nextZone.y &&
+            previousZone.width === nextZone.width &&
+            previousZone.height === nextZone.height)
+        ) {
+          return token;
+        }
+        return {
+          ...token,
+          ...remapTokenIntoResizedZone(
+            token,
+            previousZone,
+            nextZone,
+            boardMetricsRef.current,
+            token.x,
+            token.y
+          )
+        };
+      });
 
       return addActivityLog(
         { ...prevState, zones: updatedZones, tokens: updatedTokens },
