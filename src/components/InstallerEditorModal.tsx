@@ -78,11 +78,11 @@ export const InstallerEditorModal: React.FC<InstallerEditorModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-stone-900/55 backdrop-blur-xs"
+      className="app-modal fixed inset-0 z-[60] flex items-center justify-center p-4 bg-stone-900/55 backdrop-blur-xs"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-2xl max-h-[92vh] bg-white rounded-2xl shadow-2xl border border-stone-200 overflow-hidden flex flex-col"
+        className="app-modal-panel w-full max-w-2xl max-h-[92vh] bg-white rounded-2xl shadow-2xl border border-stone-200 overflow-hidden flex flex-col"
         onClick={(event) => event.stopPropagation()}
       >
         <header className="px-5 py-4 border-b border-stone-200 bg-blue-50/60 flex items-center justify-between gap-3">

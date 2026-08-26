@@ -59,10 +59,20 @@ export const ZoneCardComponent: React.FC<ZoneCardProps> = ({
         isActive ? 'ring-2 ring-blue-500/70 shadow-lg z-10' : 'transition-all'
       }`}
     >
+      {/* 구역 빈 공간 전용 입력면. 배경 드래그 선택은 캔버스로 버블링하고, 더블클릭만 구역 설정으로 처리한다. */}
+      <div
+        className="whiteboard-zone-surface absolute inset-0 z-0 rounded-2xl pointer-events-auto"
+        onDoubleClick={(e) => {
+          e.stopPropagation();
+          onEditZone(zone);
+        }}
+        title="빈 공간 더블클릭 시 구역 설정"
+      />
+
       {/* 구역 헤더 (= 구역 이동 손잡이) */}
       <div
         style={{ borderBottomColor: zone.borderColor || '#cbd5e1' }}
-        className="pointer-events-auto flex items-center justify-between gap-2 px-3 py-1.5 bg-white/80 border-b backdrop-blur-xs select-none cursor-move rounded-t-xl touch-none"
+        className="relative z-10 pointer-events-auto flex items-center justify-between gap-2 px-3 py-1.5 bg-white/80 border-b backdrop-blur-xs select-none cursor-move rounded-t-xl touch-none"
         onPointerDown={(e) => onZonePointerDown(e, zone, 'move')}
         title="드래그하여 구역 위치 이동 / 구역명 더블클릭 시 수정창 열기"
       >
@@ -145,7 +155,7 @@ export const ZoneCardComponent: React.FC<ZoneCardProps> = ({
 
       {/* 부제목 */}
       {showSubtitle && zone.subtitle && (
-        <div className="px-3 py-1 text-[10px] text-stone-500 font-medium italic border-b border-stone-200/40 bg-white/30 truncate whitespace-nowrap pointer-events-none">
+        <div className="relative z-10 px-3 py-1 text-[10px] text-stone-500 font-medium italic border-b border-stone-200/40 bg-white/30 truncate whitespace-nowrap pointer-events-none">
           {zone.subtitle}
         </div>
       )}

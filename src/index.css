@@ -132,3 +132,205 @@
   background-color: #f8fafc;
   background-image: none;
 }
+
+/* ------------------------------------------------------------------ */
+/*  모바일 반응형 - 모달을 전체 화면 시트로 전환                        */
+/*  data-view="mobile" 는 '모바일 고정' 모드에서도 동일하게 적용된다.   */
+/* ------------------------------------------------------------------ */
+
+@media (max-width: 767px) {
+  .app-modal {
+    padding: 0 !important;
+    align-items: stretch !important;
+  }
+
+  .app-modal-panel {
+    max-width: 100% !important;
+    width: 100% !important;
+    height: 100% !important;
+    max-height: 100% !important;
+    border-radius: 0 !important;
+    border-left: 0 !important;
+    border-right: 0 !important;
+  }
+}
+
+[data-view='mobile'] .app-modal {
+  padding: 0 !important;
+  align-items: stretch !important;
+}
+
+[data-view='mobile'] .app-modal-panel {
+  max-width: 100% !important;
+  width: 100% !important;
+  height: 100% !important;
+  max-height: 100% !important;
+  min-height: 0 !important;
+  border-radius: 0 !important;
+  border-left: 0 !important;
+  border-right: 0 !important;
+}
+
+/* 모바일에서는 조밀한 표/버튼 글자를 조금 줄여 깨짐을 막는다 */
+[data-view='mobile'] .app-modal-panel h2,
+[data-view='mobile'] .app-modal-panel h3 {
+  font-size: 0.95rem;
+  line-height: 1.3;
+}
+
+[data-view='mobile'] .app-modal-panel table {
+  font-size: 11px;
+}
+
+/* 모바일에서 가로로 넘치는 영역은 스스로 스크롤되게 한다 */
+[data-view='mobile'] .app-modal-panel .overflow-x-auto,
+[data-view='mobile'] .app-modal-panel table {
+  -webkit-overflow-scrolling: touch;
+}
+
+/* 모바일 미리보기 틀 안에서는 fixed 요소가 틀 밖으로 나가지 않도록 한다 */
+.phone-frame {
+  transform: translateZ(0);
+}
+
+/* 모바일 고정 모드에서는 미디어쿼리 대신 클래스로 단일 컬럼을 강제한다 */
+[data-view='mobile'] .responsive-split {
+  grid-template-columns: 1fr !important;
+  overflow-y: auto !important;
+}
+
+[data-view='mobile'] .calendar-grid {
+  min-height: 340px !important;
+}
+
+/* 모바일에서 모달 안쪽 여백을 줄여 좁은 화면을 넉넉히 쓴다 */
+[data-view='mobile'] .app-modal-panel header,
+[data-view='mobile'] .app-modal-panel > div:first-child {
+  padding-left: 0.875rem;
+  padding-right: 0.875rem;
+}
+
+/* 가로 모드 휴대폰처럼 세로가 짧은 화면에서도 모달을 꽉 채운다 */
+@media (max-height: 520px) {
+  .app-modal {
+    padding: 0 !important;
+    align-items: stretch !important;
+  }
+
+  .app-modal-panel {
+    height: 100% !important;
+    max-height: 100% !important;
+    border-radius: 0 !important;
+  }
+
+  [data-view='desktop'] .calendar-grid {
+    min-height: 300px !important;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/*  모바일: 버튼 글자가 세로로 접히지 않도록 (한 줄 유지 + 글자 축소)   */
+/* ------------------------------------------------------------------ */
+
+[data-view='mobile'] button {
+  white-space: nowrap;
+}
+
+[data-view='mobile'] .app-modal-panel .text-sm {
+  font-size: 0.78rem;
+  line-height: 1.15rem;
+}
+
+[data-view='mobile'] .app-modal-panel .text-xs {
+  font-size: 0.7rem;
+  line-height: 1rem;
+}
+
+[data-view='mobile'] .app-modal-panel .text-lg {
+  font-size: 0.95rem;
+  line-height: 1.3rem;
+}
+
+[data-view='mobile'] .app-modal-panel .text-base {
+  font-size: 0.85rem;
+  line-height: 1.2rem;
+}
+
+/* 모바일 모달 헤더 버튼은 여백을 줄여 한 줄에 들어가게 한다 */
+[data-view='mobile'] .app-modal-panel button.px-3 {
+  padding-left: 0.5rem;
+  padding-right: 0.5rem;
+}
+
+/* ------------------------------------------------------------------ */
+/*  모바일 캘린더: 캘린더를 맨 위로 · 세로 스크롤 · 칸 높이 확보        */
+/* ------------------------------------------------------------------ */
+
+[data-view='mobile'] .responsive-split {
+  grid-template-columns: 1fr !important;
+  grid-auto-rows: min-content !important;
+  align-content: start !important;
+  overflow-y: auto !important;
+  -webkit-overflow-scrolling: touch;
+}
+
+@media (max-width: 1279px) {
+  .responsive-split {
+    grid-auto-rows: min-content;
+    align-content: start;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+/* 캘린더 → 상세 → 기사목록 순서로 배치 */
+[data-view='mobile'] .pane-calendar {
+  order: 1;
+  overflow: visible !important;
+}
+
+[data-view='mobile'] .pane-detail {
+  order: 2;
+}
+
+[data-view='mobile'] .pane-installers {
+  order: 3;
+}
+
+/* 날짜 칸을 넉넉히 (6주 x 84px) 확보하고 글자는 작게 */
+[data-view='mobile'] .calendar-grid {
+  min-height: 504px !important;
+}
+
+[data-view='mobile'] .calendar-cell {
+  padding: 3px !important;
+}
+
+[data-view='mobile'] .calendar-event {
+  font-size: 8px !important;
+  line-height: 11px !important;
+  padding: 1px 3px !important;
+  border-left-width: 3px !important;
+}
+
+@media (max-width: 767px) {
+  .pane-calendar {
+    order: 1;
+    overflow: visible !important;
+  }
+  .pane-detail {
+    order: 2;
+  }
+  .pane-installers {
+    order: 3;
+  }
+  .calendar-grid {
+    min-height: 504px !important;
+  }
+  .calendar-event {
+    font-size: 8px !important;
+    line-height: 11px !important;
+    padding: 1px 3px !important;
+    border-left-width: 3px !important;
+  }
+}

@@ -27,7 +27,13 @@ import {
   addActivityLog
 } from './utils/storage';
 import { INITIAL_BOARD_STATE, DEFAULT_SITE_SETTINGS } from './data/initialData';
-import { arrangeZoneTokens, clampTokenToZone, getTokenSizePx, resolveTokenCollisions } from './utils/layout';
+import {
+  arrangeZoneTokens,
+  clampTokenToZone,
+  getTokenSizePx,
+  remapTokenIntoResizedZone,
+  resolveTokenCollisions
+} from './utils/layout';
 import { Navbar } from './components/Navbar';
 import { WhiteboardCanvas } from './components/WhiteboardCanvas';
 import { MagnetEditorModal } from './components/MagnetEditorModal';
@@ -39,7 +45,10 @@ import { UserScheduleHistoryDrawer } from './components/UserScheduleHistoryDrawe
 import { LayoutLibraryModal } from './components/LayoutLibraryModal';
 import { RosterSheetModal } from './components/RosterSheetModal';
 import { SettingsModal } from './components/SettingsModal';
+import { BoardSettingsModal } from './components/BoardSettingsModal';
 import { LoginScreen } from './components/LoginScreen';
+import { useIsMobile, useOrientation } from './hooks/useIsMobile';
+import { Smartphone, RotateCw, Monitor } from 'lucide-react';
 import { listSnapshots, replaceSnapshots } from './utils/snapshots';
 import {
   createCloudUser, deleteCloudUser, getCloudToken, loadCloud, loginCloud,
@@ -150,6 +159,18 @@ export default function App() {
     setSettings(next);
   }, []);
 
+  // 화면 모드 (자동 / PC 고정 / 모바일 고정)
+  const isMobile = useIsMobile(settings.viewMode);
+  /** 실제 창이 좁은지 (기기 자체가 모바일인지) */
+  const isNarrowWindow = useIsMobile('auto');
+  const deviceOrientation = useOrientation();
+  /** PC 창에서 '모바일 고정'을 골랐을 때만 휴대폰 모양 틀로 미리보기 */
+  const isPhoneFrame = settings.viewMode === 'mobile' && !isNarrowWindow;
+  const frameSize =
+    settings.mobileOrientation === 'landscape'
+      ? { width: 860, height: 430 }
+      : { width: 420, height: 860 };
+
   // 3. 보드 상태 (히스토리 포함)
   const [history, dispatch] = useReducer(historyReducer, undefined, () => ({
     present: getSessionUserId() ? getBoardStateForUser(getSessionUserId()!) : createGuestBoard(),
@@ -165,7 +186,10 @@ export default function App() {
   }, []);
 
   /** 보드의 실제 픽셀 크기 (모형이 구역 글자/선을 침범하지 않도록 계산할 때 사용) */
-  const boardMetricsRef = useRef<BoardMetrics>({ width: 950, height: 620 });
+  const boardMetricsRef = useRef<BoardMetrics>({
+    width: settings.boardWidth || 1600,
+    height: settings.boardHeight || 1000
+  });
   const handleBoardMetricsChange = useCallback((metrics: BoardMetrics) => {
     if (metrics.width > 0 && metrics.height > 0) {
       boardMetricsRef.current = metrics;
@@ -177,9 +201,12 @@ export default function App() {
   const [selectionAnchorTokenId, setSelectionAnchorTokenId] = useState<string | null>(null);
   const [focusTokenId, setFocusTokenId] = useState<string | null>(null);
   const [searchFilter, setSearchFilter] = useState('');
+  /** 메뉴를 감추고 대시보드만 꽉 채워 보는 모드 (PC·모바일 공통) */
+  const [isBoardOnly, setIsBoardOnly] = useState(false);
 
   // 5. 모달
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isBoardSettingsOpen, setIsBoardSettingsOpen] = useState(false);
   const [isScheduleDrawerOpen, setIsScheduleDrawerOpen] = useState(false);
   const [scheduleFocusTokenId, setScheduleFocusTokenId] = useState<string | null>(null);
   const [isLayoutLibraryOpen, setIsLayoutLibraryOpen] = useState(false);
@@ -197,6 +224,7 @@ export default function App() {
 
   const isAnyModalOpen =
     isSettingsOpen ||
+    isBoardSettingsOpen ||
     isScheduleDrawerOpen ||
     isLayoutLibraryOpen ||
     isRosterModalOpen ||
@@ -326,6 +354,16 @@ export default function App() {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [boardState.tokens, isAnyModalOpen, selectionAnchorTokenId]);
+
+  /** 대시보드만 보기 상태에서 ESC 를 누르면 메뉴를 다시 보여준다 */
+  useEffect(() => {
+    if (!isBoardOnly) return;
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setIsBoardOnly(false);
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [isBoardOnly]);
 
   /* ------------------------------------------------------------ 계정 관리 */
   const completeLogin = (user: UserAccount, state: BoardState, nextSnapshots: BoardSnapshot[]) => {
@@ -551,30 +589,34 @@ export default function App() {
         const updatedZone: BoardZone = { ...zone, ...rect };
         const updatedZones = prevState.zones.map((z) => (z.id === zoneId ? updatedZone : z));
 
-        // 구역을 옮기면 소속 모형도 같이 이동하고, 크기를 바꾸면 안쪽으로 다시 맞춘다
+        /*
+         * 구역을 옮기면 소속 모형도 같은 거리만큼 따라간다.
+         * 구역 크기를 바꾸면 모형은 '구역 안에서의 상대 위치'를 기억한 것처럼
+         * 같은 비율로 함께 늘어나거나 좁혀진다.
+         */
         const dx = rect.x - zone.x;
         const dy = rect.y - zone.y;
-        const fittedTokens = prevState.tokens.map((t) => {
+        const updatedTokens = prevState.tokens.map((t) => {
           if (t.zoneId !== zoneId) return t;
 
-          const moved =
-            mode === 'move'
-              ? { x: clamp(t.x + dx, 3, 97), y: clamp(t.y + dy, 3, 97) }
-              : { x: t.x, y: t.y };
+          if (mode === 'move') {
+            const moved = { x: clamp(t.x + dx, 3, 97), y: clamp(t.y + dy, 3, 97) };
+            const fitted = settings.keepInsideZone
+              ? clampTokenToZone(t, updatedZone, boardMetricsRef.current, moved.x, moved.y)
+              : { x: round1(moved.x), y: round1(moved.y) };
+            return { ...t, x: fitted.x, y: fitted.y };
+          }
 
-          const fitted = settings.keepInsideZone
-            ? clampTokenToZone(t, updatedZone, boardMetricsRef.current, moved.x, moved.y)
-            : { x: round1(moved.x), y: round1(moved.y) };
-
-          return { ...t, x: fitted.x, y: fitted.y };
+          const remapped = remapTokenIntoResizedZone(
+            t,
+            zone,
+            updatedZone,
+            boardMetricsRef.current,
+            t.x,
+            t.y
+          );
+          return { ...t, x: remapped.x, y: remapped.y };
         });
-        const updatedTokens = resolveTokenCollisions(
-          fittedTokens,
-          fittedTokens.filter((token) => token.zoneId === zoneId).map((token) => token.id),
-          updatedZones,
-          boardMetricsRef.current,
-          settings.keepInsideZone
-        );
 
         return addActivityLog(
           { ...prevState, zones: updatedZones, tokens: updatedTokens },
@@ -1188,13 +1230,23 @@ export default function App() {
     [boardState.schedules, activeUser]
   );
 
-  return (
-    <div className="flex flex-col h-screen w-screen overflow-hidden bg-stone-100 font-sans select-none">
+  const appShell = (
+    <div
+      data-view={isMobile ? 'mobile' : 'desktop'}
+      className="flex flex-col h-full w-full overflow-hidden bg-stone-100 font-sans select-none"
+    >
+      {!isBoardOnly && (
       <Navbar
         boardTitle={settings.dashboardTitle}
         companyName={settings.companyName}
         activeUser={activeUser}
         isLoggedIn={isLoggedIn}
+        isMobile={isMobile}
+        viewMode={settings.viewMode}
+        onToggleMobilePreview={() =>
+          updateSettings({ viewMode: settings.viewMode === 'mobile' ? 'auto' : 'mobile' })
+        }
+        onEnterBoardOnly={() => setIsBoardOnly(true)}
         userPendingSchedulesCount={userPendingSchedulesCount}
         searchFilter={searchFilter}
         canUndo={canUndo}
@@ -1210,12 +1262,16 @@ export default function App() {
         onOpenSettings={() => setIsSettingsOpen(true)}
         onOpenLogin={() => setIsLoginOpen(true)}
       />
+      )}
 
       <main className="flex-1 relative overflow-hidden flex">
         <WhiteboardCanvas
           tokens={boardState.tokens}
           zones={boardState.zones}
           settings={settings}
+          isMobile={isMobile}
+          isBoardOnly={isBoardOnly}
+          onToggleBoardOnly={() => setIsBoardOnly((prev) => !prev)}
           selectedTokenIds={selectedTokenIds}
           focusTokenId={isAnyModalOpen ? null : focusTokenId}
           searchFilter={searchFilter}
@@ -1255,6 +1311,7 @@ export default function App() {
           }}
           onOpenMagnetManager={() => setIsMagnetManagerOpen(true)}
           onOpenZoneManager={() => setIsZoneManagerOpen(true)}
+          onOpenBoardSettings={() => setIsBoardSettingsOpen(true)}
           onFocusHandled={() => setFocusTokenId(null)}
         />
       </main>
@@ -1386,6 +1443,13 @@ export default function App() {
         onSave={handleSaveInstaller}
       />
 
+      <BoardSettingsModal
+        isOpen={isBoardSettingsOpen}
+        settings={settings}
+        onClose={() => setIsBoardSettingsOpen(false)}
+        onUpdateSettings={updateSettings}
+      />
+
       <SettingsModal
         isOpen={isSettingsOpen}
         settings={settings}
@@ -1412,5 +1476,54 @@ export default function App() {
         />
       )}
     </div>
+  );
+
+  // PC 에서 모바일 화면을 미리볼 때는 휴대폰 모양 틀 안에 넣어 보여준다
+  if (isPhoneFrame) {
+    return (
+      <div className="h-dvh w-screen overflow-hidden bg-stone-300 flex flex-col items-center justify-center gap-3 p-4">
+        <div className="flex items-center gap-2 text-xs font-semibold text-stone-600 whitespace-nowrap">
+          <Smartphone className="w-4 h-4 shrink-0" />
+          <span>모바일 미리보기</span>
+          <button
+            type="button"
+            onClick={() =>
+              updateSettings({
+                mobileOrientation:
+                  settings.mobileOrientation === 'portrait' ? 'landscape' : 'portrait'
+              })
+            }
+            className="px-2.5 py-1 rounded-lg bg-white border border-stone-300 hover:bg-stone-50 transition-colors flex items-center gap-1"
+          >
+            <RotateCw className="w-3.5 h-3.5 shrink-0" />
+            <span>{settings.mobileOrientation === 'portrait' ? '가로 모드' : '세로 모드'}</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => updateSettings({ viewMode: 'auto' })}
+            className="px-2.5 py-1 rounded-lg bg-stone-800 text-white hover:bg-stone-900 transition-colors flex items-center gap-1"
+          >
+            <Monitor className="w-3.5 h-3.5 shrink-0" />
+            <span>PC 화면으로</span>
+          </button>
+        </div>
+
+        <div
+          style={{
+            width: `${frameSize.width}px`,
+            height: `${frameSize.height}px`,
+            maxWidth: 'calc(100vw - 2rem)',
+            maxHeight: 'calc(100dvh - 5rem)'
+          }}
+          className="phone-frame relative overflow-hidden rounded-[2rem] border-[10px] border-stone-800 bg-stone-100 shadow-2xl"
+        >
+          {appShell}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="h-dvh w-screen overflow-hidden">{appShell}</div>
   );
 }

@@ -11,6 +11,29 @@ export const SIZE_PRESET_PX: Record<MagnetSize, number> = {
 export const MIN_TOKEN_PX = 36;
 export const MAX_TOKEN_PX = 170;
 
+/**
+ * 보드의 고정 논리 크기(px).
+ * 화면 크기가 바뀌어도 이 값은 변하지 않고, 보이는 크기만 배율(scale)로 조절된다.
+ * 덕분에 모형/구역의 저장된 위치·크기가 창 크기에 따라 흐트러지지 않는다.
+ */
+export const DEFAULT_BOARD_WIDTH = 1600;
+export const DEFAULT_BOARD_HEIGHT = 1000;
+
+/** 보드 크기 조절 허용 범위(px) */
+export const MIN_BOARD_SIZE = 800;
+export const MAX_BOARD_SIZE = 4000;
+
+/** 화면(컨테이너) 안에 보드 전체가 들어가도록 하는 기본 배율 */
+export function getFitScale(
+  containerWidth: number,
+  containerHeight: number,
+  boardWidth: number = DEFAULT_BOARD_WIDTH,
+  boardHeight: number = DEFAULT_BOARD_HEIGHT
+): number {
+  if (containerWidth <= 0 || containerHeight <= 0) return 1;
+  return Math.min(containerWidth / boardWidth, containerHeight / boardHeight);
+}
+
 /** 구역 헤더(제목 줄) 높이(px) - 모형이 이 영역을 덮지 않도록 한다 */
 const ZONE_HEADER_PX = 34;
 /** 구역 부제목 줄 높이(px) */
@@ -88,6 +111,35 @@ export function clampTokenToZone(
     x: round1(minX > maxX ? (area.left + area.right) / 2 : clamp(x, minX, maxX)),
     y: round1(minY > maxY ? (area.top + area.bottom) / 2 : clamp(y, minY, maxY))
   };
+}
+
+/**
+ * 구역 크기가 바뀔 때, 모형이 "구역 안에서의 상대 위치"를 그대로 유지하도록 좌표를 다시 계산한다.
+ * 구역을 늘리면 모형 간격도 같은 비율로 벌어지고, 줄이면 같은 비율로 좁혀진다.
+ * (헤더/테두리를 뺀 안전 영역 기준이라 제목 위로 올라가지 않는다)
+ */
+export function remapTokenIntoResizedZone(
+  token: Pick<MagnetToken, 'size' | 'sizePx' | 'shape'>,
+  previousZone: BoardZone,
+  nextZone: BoardZone,
+  metrics: BoardMetrics,
+  x: number,
+  y: number
+): { x: number; y: number } {
+  const before = getZoneSafeArea(previousZone, metrics);
+  const after = getZoneSafeArea(nextZone, metrics);
+
+  // 이전 안전 영역 안에서의 비율 위치 (0~1)
+  const ratioX = before.width > 0 ? (x - before.left) / before.width : 0.5;
+  const ratioY = before.height > 0 ? (y - before.top) / before.height : 0.5;
+
+  return clampTokenToZone(
+    token,
+    nextZone,
+    metrics,
+    after.left + ratioX * after.width,
+    after.top + ratioY * after.height
+  );
 }
 
 /**

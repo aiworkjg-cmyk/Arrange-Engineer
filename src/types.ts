@@ -156,6 +156,15 @@ export interface SiteSettings {
   defaultFontStyle: MagnetFontStyle;
   confirmOnDelete: boolean;
   keepInsideZone: boolean;
+  /** 화면 모드: 자동(창 너비 기준) / PC 고정 / 모바일 고정 */
+  /** 보드(배경판)의 논리 크기 - 화면 크기와 무관하게 고정된 기준 */
+  boardWidth: number;
+  boardHeight: number;
+  /** 보드 배경색 */
+  boardBackground: string;
+  viewMode: 'auto' | 'desktop' | 'mobile';
+  /** PC에서 모바일 모드로 미리볼 때의 방향 */
+  mobileOrientation: 'portrait' | 'landscape';
 }
 
 /** 구역의 위치/크기 (보드 대비 % 단위) */

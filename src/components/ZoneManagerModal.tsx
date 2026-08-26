@@ -99,8 +99,8 @@ export const ZoneManagerModal: React.FC<ZoneManagerModalProps> = ({
     `rounded-xl border p-3 transition-colors ${enabled[field] ? 'border-amber-300 bg-amber-50/60' : 'border-stone-200 bg-stone-50/60'}`;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 bg-stone-900/55 backdrop-blur-xs" onClick={onClose}>
-      <div className="w-full max-w-6xl h-[min(760px,92vh)] bg-white rounded-2xl shadow-2xl border border-stone-200 overflow-hidden flex flex-col" onClick={(event) => event.stopPropagation()}>
+    <div className="app-modal fixed inset-0 z-50 flex items-center justify-center p-3 bg-stone-900/55 backdrop-blur-xs" onClick={onClose}>
+      <div className="app-modal-panel w-full max-w-6xl h-[min(760px,92vh)] bg-white rounded-2xl shadow-2xl border border-stone-200 overflow-hidden flex flex-col" onClick={(event) => event.stopPropagation()}>
         <header className="flex items-center justify-between gap-3 px-5 py-4 border-b border-stone-200 bg-amber-50/70">
           <div className="flex items-center gap-3 min-w-0">
             <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center"><LayoutList className="w-5 h-5" /></div>
@@ -109,7 +109,7 @@ export const ZoneManagerModal: React.FC<ZoneManagerModalProps> = ({
           <button type="button" onClick={onClose} className="p-2 rounded-full hover:bg-stone-200 text-stone-500"><X className="w-5 h-5" /></button>
         </header>
 
-        <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[minmax(360px,0.95fr)_minmax(440px,1.05fr)]">
+        <div className="responsive-split flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[minmax(360px,0.95fr)_minmax(440px,1.05fr)]">
           <section className="min-h-0 flex flex-col border-b lg:border-b-0 lg:border-r border-stone-200">
             <div className="p-4 space-y-3 border-b border-stone-100">
               <div className="flex items-center justify-between gap-2"><div><span className="font-bold text-sm text-stone-800">전체 구역</span><span className="ml-2 text-xs text-stone-500">{zones.length}개 중 {selectedIds.length}개 선택</span></div><div className="flex gap-1"><button type="button" onClick={onAdd} className="px-2.5 py-1.5 text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 rounded-lg flex items-center gap-1"><Plus className="w-3.5 h-3.5" />추가</button><button type="button" disabled={!selectedIds.length} onClick={() => onDelete(selectedIds)} className="px-2.5 py-1.5 text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 disabled:opacity-40 border border-rose-200 rounded-lg flex items-center gap-1"><Trash2 className="w-3.5 h-3.5" />삭제</button></div></div>

@@ -110,8 +110,8 @@ export const RosterSheetModal: React.FC<RosterSheetModalProps> = ({
     tokens.find((token) => token.title === installer.name);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/50 backdrop-blur-xs" onClick={onClose}>
-      <div className="w-full max-w-6xl bg-white rounded-2xl shadow-2xl border border-stone-200 overflow-hidden flex flex-col max-h-[92vh]" onClick={(event) => event.stopPropagation()}>
+    <div className="app-modal fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/50 backdrop-blur-xs" onClick={onClose}>
+      <div className="app-modal-panel w-full max-w-6xl bg-white rounded-2xl shadow-2xl border border-stone-200 overflow-hidden flex flex-col max-h-[92vh]" onClick={(event) => event.stopPropagation()}>
         <header className="p-5 border-b border-stone-200 bg-emerald-50/60 flex items-start justify-between gap-3">
           <div className="flex items-start gap-3 min-w-0">
             <div className="w-10 h-10 rounded-xl bg-emerald-100 border border-emerald-300 text-emerald-800 flex items-center justify-center shadow-xs">

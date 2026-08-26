@@ -146,11 +146,11 @@ export const MagnetManagerModal: React.FC<MagnetManagerModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-3 bg-stone-900/55 backdrop-blur-xs"
+      className="app-modal fixed inset-0 z-50 flex items-center justify-center p-3 bg-stone-900/55 backdrop-blur-xs"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-6xl h-[min(780px,92vh)] bg-white rounded-2xl shadow-2xl border border-stone-200 overflow-hidden flex flex-col"
+        className="app-modal-panel w-full max-w-6xl h-[min(780px,92vh)] bg-white rounded-2xl shadow-2xl border border-stone-200 overflow-hidden flex flex-col"
         onClick={(event) => event.stopPropagation()}
       >
         <header className="flex items-center justify-between gap-3 px-5 py-4 border-b border-stone-200 bg-stone-50/80">
@@ -170,7 +170,7 @@ export const MagnetManagerModal: React.FC<MagnetManagerModalProps> = ({
           </button>
         </header>
 
-        <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[minmax(340px,0.9fr)_minmax(460px,1.1fr)]">
+        <div className="responsive-split flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[minmax(340px,0.9fr)_minmax(460px,1.1fr)]">
           <section className="min-h-0 flex flex-col border-b lg:border-b-0 lg:border-r border-stone-200">
             <div className="p-4 space-y-3 border-b border-stone-100">
               <div className="flex items-center justify-between gap-2">
@@ -325,7 +325,7 @@ export const MagnetManagerModal: React.FC<MagnetManagerModalProps> = ({
         </div>
 
         <footer className="flex items-center justify-between gap-3 px-5 py-3 border-t border-stone-200 bg-stone-50">
-          <span className="text-xs text-stone-500">보드의 Ctrl+클릭·드래그 선택과 이 목록의 선택이 함께 유지됩니다.</span>
+          <span className="text-xs text-stone-500">보드의 Ctrl+클릭 선택과 이 목록의 선택이 함께 유지됩니다.</span>
           <div className="flex items-center gap-2 shrink-0">
             <button type="button" onClick={onClose} className="px-4 py-2 text-xs font-bold text-stone-600 hover:bg-stone-200 rounded-lg">닫기</button>
             <button

@@ -17,7 +17,10 @@ import {
   AlertTriangle,
   X,
   FolderOpen,
-  RefreshCw
+  RefreshCw,
+  Monitor,
+  Smartphone,
+  RotateCw
 } from 'lucide-react';
 
 interface SettingsModalProps {
@@ -266,11 +269,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/50 backdrop-blur-xs animate-in fade-in duration-150"
+      className="app-modal fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/50 backdrop-blur-xs animate-in fade-in duration-150"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-2xl bg-white rounded-2xl shadow-2xl border border-stone-200 overflow-hidden flex flex-col max-h-[92vh]"
+        className="app-modal-panel w-full max-w-2xl bg-white rounded-2xl shadow-2xl border border-stone-200 overflow-hidden flex flex-col max-h-[92vh]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* 헤더 */}
@@ -432,6 +435,70 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 settings.keepInsideZone,
                 (v) => onUpdateSettings({ keepInsideZone: v })
               )}
+
+              {/* 화면 모드 */}
+              <div className="pt-2">
+                <label className={labelClass}>화면 모드</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {(
+                    [
+                      ['auto', '자동', <Monitor key="a" className="w-3.5 h-3.5" />],
+                      ['desktop', 'PC 고정', <Monitor key="d" className="w-3.5 h-3.5" />],
+                      ['mobile', '모바일', <Smartphone key="m" className="w-3.5 h-3.5" />]
+                    ] as const
+                  ).map(([value, label, icon]) => (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => onUpdateSettings({ viewMode: value as SiteSettings['viewMode'] })}
+                      className={`py-2 text-xs font-semibold rounded-lg border transition-all whitespace-nowrap flex items-center justify-center gap-1.5 ${
+                        settings.viewMode === value
+                          ? 'border-blue-600 bg-blue-50 text-blue-700'
+                          : 'border-stone-200 text-stone-600 hover:bg-stone-50'
+                      }`}
+                    >
+                      {icon}
+                      <span>{label}</span>
+                    </button>
+                  ))}
+                </div>
+                <p className="mt-1.5 text-[11px] text-stone-500">
+                  자동은 창 너비로 판단합니다. PC에서 [모바일]을 고르면 휴대폰 화면으로 미리볼 수 있고,
+                  데이터는 PC와 그대로 이어집니다.
+                </p>
+
+                {settings.viewMode === 'mobile' && (
+                  <div className="mt-2">
+                    <label className={labelClass}>모바일 미리보기 방향</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {(
+                        [
+                          ['portrait', '세로 모드'],
+                          ['landscape', '가로 모드']
+                        ] as const
+                      ).map(([value, label]) => (
+                        <button
+                          key={value}
+                          type="button"
+                          onClick={() =>
+                            onUpdateSettings({
+                              mobileOrientation: value as SiteSettings['mobileOrientation']
+                            })
+                          }
+                          className={`py-2 text-xs font-semibold rounded-lg border transition-all whitespace-nowrap flex items-center justify-center gap-1.5 ${
+                            settings.mobileOrientation === value
+                              ? 'border-blue-600 bg-blue-50 text-blue-700'
+                              : 'border-stone-200 text-stone-600 hover:bg-stone-50'
+                          }`}
+                        >
+                          <RotateCw className="w-3.5 h-3.5 shrink-0" />
+                          <span>{label}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
 
               <div className="pt-2">
                 <label className={labelClass}>검색 강조 효과</label>
