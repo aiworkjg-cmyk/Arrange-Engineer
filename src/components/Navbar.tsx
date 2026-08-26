@@ -140,11 +140,11 @@ export const Navbar: React.FC<NavbarProps> = ({
               title="사이트 설정 관리"
             >
               <div style={{ backgroundColor: activeUser.avatarColor || '#3b82f6' }} className="w-6 h-6 rounded-lg text-white font-bold text-xs flex items-center justify-center shadow-2xs shrink-0">
-                {activeUser.isMaster ? <ShieldCheck className="w-3.5 h-3.5" /> : activeUser.name.slice(0, 1)}
+                {activeUser.isMaster || activeUser.isAdmin ? <ShieldCheck className="w-3.5 h-3.5" /> : activeUser.name.slice(0, 1)}
               </div>
               <div className="hidden sm:flex flex-col text-left leading-none">
                 <span className="text-xs font-bold text-stone-900 whitespace-nowrap">{activeUser.name}</span>
-                <span className="text-[10px] text-stone-500 whitespace-nowrap">{activeUser.isMaster ? '마스터 관리자' : activeUser.role}</span>
+                <span className="text-[10px] text-stone-500 whitespace-nowrap">{activeUser.isMaster ? '마스터 관리자' : activeUser.isAdmin ? '관리자' : activeUser.role}</span>
               </div>
               <Settings className="w-3.5 h-3.5 text-stone-400 group-hover:text-blue-600 transition-colors shrink-0" />
             </button>

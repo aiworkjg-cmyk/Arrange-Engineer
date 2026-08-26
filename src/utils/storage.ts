@@ -132,6 +132,7 @@ function normalizeUsers(users: UserAccount[]): UserAccount[] {
     return {
       ...user,
       isMaster,
+      isAdmin: !isMaster && user.isAdmin === true,
       loginId: uniqueLoginId,
       password: user.password || (isMaster ? MASTER_USER.password! : DEFAULT_USER_PASSWORD)
     };

@@ -119,6 +119,8 @@ export interface UserAccount {
   password?: string;
   /** 마스터(관리자) 계정 여부 - 계정 추가/삭제 권한 */
   isMaster?: boolean;
+  /** 마스터 복구 대상은 아니지만 계정 관리가 가능한 관리자 권한 */
+  isAdmin?: boolean;
 }
 
 /** 화면에 그려진 보드의 실제 픽셀 크기 (퍼센트 <-> 픽셀 변환용) */

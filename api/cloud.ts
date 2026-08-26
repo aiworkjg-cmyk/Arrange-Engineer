@@ -12,6 +12,7 @@ interface CloudUser {
   department?: string;
   loginId: string;
   isMaster?: boolean;
+  isAdmin?: boolean;
   passwordHash: string;
   passwordSalt: string;
 }
@@ -53,6 +54,7 @@ const passwordMatches = (user: CloudUser, password: string) => {
   return actual.length === expected.length && timingSafeEqual(actual, expected);
 };
 const publicUser = ({ passwordHash: _hash, passwordSalt: _salt, ...user }: CloudUser) => user;
+const canManageUsers = (user: CloudUser) => user.isMaster === true || user.isAdmin === true;
 
 const sign = (value: string) => createHmac('sha256', sessionSecret).update(value).digest('base64url');
 const createSession = (userId: string) => {
@@ -155,7 +157,7 @@ export default async function handler(req: any, res: any) {
       return send(res, 200, { user: publicUser(nextUser), users: users.map(publicUser) });
     }
     if (action === 'createUser') {
-      if (!user.isMaster) return send(res, 403, { message: '마스터 계정만 계정을 추가할 수 있습니다.' });
+      if (!canManageUsers(user)) return send(res, 403, { message: '관리자 권한이 있는 계정만 계정을 추가할 수 있습니다.' });
       const input = body.user || {};
       const loginId = String(input.loginId || '').trim();
       const password = String(input.password || '');
@@ -163,14 +165,14 @@ export default async function handler(req: any, res: any) {
       const newUser: CloudUser = {
         id: `u-${Date.now()}`, name: String(input.name || loginId), email: String(input.email || `${loginId}@cloud.local`),
         role: input.role || '작업자', phone: input.phone || undefined, avatarColor: input.avatarColor || '#3b82f6',
-        department: input.department || undefined, loginId, isMaster: false, ...passwordRecord(password)
+        department: input.department || undefined, loginId, isMaster: false, isAdmin: input.isAdmin === true, ...passwordRecord(password)
       };
       users = [...users, newUser];
       await redis!.set(USERS_KEY, users);
       return send(res, 200, { user: publicUser(newUser), users: users.map(publicUser) });
     }
     if (action === 'resetUserPassword') {
-      if (!user.isMaster) return send(res, 403, { message: '마스터 계정만 비밀번호를 초기화할 수 있습니다.' });
+      if (!canManageUsers(user)) return send(res, 403, { message: '관리자 권한이 있는 계정만 비밀번호를 초기화할 수 있습니다.' });
       const targetId = String(body.userId || '');
       const newPassword = String(body.newPassword || '');
       const target = users.find((item) => item.id === targetId);
@@ -180,7 +182,7 @@ export default async function handler(req: any, res: any) {
       return send(res, 200, { users: users.map(publicUser) });
     }
     if (action === 'deleteUser') {
-      if (!user.isMaster) return send(res, 403, { message: '마스터 계정만 계정을 삭제할 수 있습니다.' });
+      if (!canManageUsers(user)) return send(res, 403, { message: '관리자 권한이 있는 계정만 계정을 삭제할 수 있습니다.' });
       const targetId = String(body.userId || '');
       const target = users.find((item) => item.id === targetId);
       if (!target || target.isMaster || target.id === user.id) return send(res, 400, { message: '해당 계정은 삭제할 수 없습니다.' });

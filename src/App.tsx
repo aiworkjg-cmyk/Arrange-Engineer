@@ -126,6 +126,7 @@ export default function App() {
   const isLoggedIn = !!sessionUserId && users.some((u) => u.id === sessionUserId);
   const activeUserId = sessionUserId || GUEST_USER.id;
   const activeUser = users.find((u) => u.id === activeUserId) || GUEST_USER;
+  const canManageAccounts = activeUser.isMaster === true || activeUser.isAdmin === true;
 
   // 2. 사이트 설정
   const [settings, setSettings] = useState<SiteSettings>(() => getSiteSettings());
@@ -382,6 +383,7 @@ export default function App() {
   };
 
   const handleCreateUser = async (newUserData: Omit<UserAccount, 'id'>): Promise<string | null> => {
+    if (!canManageAccounts) return '관리자 권한이 있는 계정만 계정을 추가할 수 있습니다.';
     if (cloudToken) {
       const result = await createCloudUser(cloudToken, newUserData);
       if (!('data' in result)) return result.message;
@@ -397,6 +399,7 @@ export default function App() {
   };
 
   const handleDeleteUser = async (userId: string): Promise<string | null> => {
+    if (!canManageAccounts) return '관리자 권한이 있는 계정만 계정을 삭제할 수 있습니다.';
     const target = users.find((u) => u.id === userId);
     if (!target || target.isMaster || userId === activeUserId) return '해당 계정은 삭제할 수 없습니다.';
 
@@ -419,7 +422,7 @@ export default function App() {
   const handleUpdateAccount = async (userId: string, patch: Partial<UserAccount>, currentPassword = ''): Promise<string | null> => {
     if (cloudToken) {
       if (userId !== activeUserId) {
-        if (!activeUser.isMaster || !patch.password) return '다른 계정은 마스터만 비밀번호를 초기화할 수 있습니다.';
+        if (!canManageAccounts || !patch.password) return '다른 계정은 관리자만 비밀번호를 초기화할 수 있습니다.';
         const resetResult = await resetCloudUserPassword(cloudToken, userId, patch.password);
         if (!('data' in resetResult)) return resetResult.message;
         setUsers(resetResult.data.users);

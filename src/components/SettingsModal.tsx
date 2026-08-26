@@ -85,10 +85,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [newLoginId, setNewLoginId] = useState('');
   const [newPw, setNewPw] = useState('1234');
   const [newRole, setNewRole] = useState<UserAccount['role']>('작업자');
+  const [newIsAdmin, setNewIsAdmin] = useState(false);
   const [newPhone, setNewPhone] = useState('');
   const [newDept, setNewDept] = useState('');
 
   const isMaster = activeUser?.isMaster === true;
+  const canManageAccounts = isMaster || activeUser?.isAdmin === true;
 
   useEscapeClose(isOpen, onClose);
 
@@ -215,7 +217,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       avatarColor: AVATAR_COLORS[Math.floor(Math.random() * AVATAR_COLORS.length)],
       loginId: id,
       password: newPw.trim(),
-      isMaster: false
+      isMaster: false,
+      isAdmin: newIsAdmin
     });
     if (error) {
       setNotice({ type: 'error', text: error });
@@ -227,6 +230,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     setNewPw('1234');
     setNewPhone('');
     setNewDept('');
+    setNewIsAdmin(false);
     setNotice({ type: 'success', text: `'${name}' 계정이 추가되었습니다.` });
   };
 
@@ -255,7 +259,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     { id: 'board', label: '보드 표시', icon: <Settings className="w-3.5 h-3.5" />, visible: true },
     { id: 'magnet', label: '모형 기본값', icon: <Palette className="w-3.5 h-3.5" />, visible: true },
     { id: 'account', label: '내 계정', icon: <UserCog className="w-3.5 h-3.5" />, visible: true },
-    { id: 'users', label: '계정 관리', icon: <Users className="w-3.5 h-3.5" />, visible: isMaster },
+    { id: 'users', label: '계정 관리', icon: <Users className="w-3.5 h-3.5" />, visible: canManageAccounts },
     { id: 'data', label: '데이터', icon: <Database className="w-3.5 h-3.5" />, visible: true },
     { id: 'reset', label: '대시보드 초기화', icon: <RefreshCw className="w-3.5 h-3.5" />, visible: true }
   ];
@@ -279,7 +283,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <h3 className="font-bold text-stone-900 text-base whitespace-nowrap">설정 관리</h3>
               <p className="text-xs text-stone-500 truncate whitespace-nowrap">
                 {activeUser?.name}
-                {isMaster ? ' · 마스터 관리자' : ` · ${activeUser?.role}`} 로 접속 중
+                {isMaster ? ' · 마스터 관리자' : activeUser?.isAdmin ? ' · 관리자' : ` · ${activeUser?.role}`} 로 접속 중
               </p>
             </div>
           </div>
@@ -646,8 +650,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </form>
           )}
 
-          {/* ------------------------------------------ 계정 관리 (마스터) */}
-          {tab === 'users' && isMaster && (
+          {/* ------------------------------------------ 계정 관리 (마스터 / 관리자) */}
+          {tab === 'users' && canManageAccounts && (
             <div className="space-y-5">
               <div>
                 <div className="text-xs font-bold text-stone-700 mb-2 flex items-center gap-1.5 whitespace-nowrap">
@@ -668,7 +672,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           style={{ backgroundColor: u.avatarColor || '#3b82f6' }}
                           className="w-9 h-9 rounded-xl text-white font-bold flex items-center justify-center text-xs shadow-xs shrink-0"
                         >
-                          {u.isMaster ? <ShieldCheck className="w-4 h-4" /> : u.name.slice(0, 2)}
+                          {u.isMaster || u.isAdmin ? <ShieldCheck className="w-4 h-4" /> : u.name.slice(0, 2)}
                         </div>
                         <div className="min-w-0">
                           <div className="flex items-center gap-1.5 min-w-0">
@@ -676,7 +680,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                               {u.name}
                             </span>
                             <span className="px-1.5 py-0.5 text-[10px] font-bold rounded bg-stone-100 text-stone-700 whitespace-nowrap shrink-0">
-                              {u.isMaster ? '마스터' : u.role}
+                              {u.isMaster ? '마스터' : u.isAdmin ? '관리자' : '일반'}
                             </span>
                           </div>
                           <div className="text-[11px] text-stone-500 truncate whitespace-nowrap">
@@ -689,6 +693,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       <div className="flex items-center gap-1 shrink-0">
                         <button
                           type="button"
+                          disabled={u.isMaster || u.id === activeUserId}
                           onClick={async () => {
                             const pw = window.prompt(`'${u.name}' 계정의 새 비밀번호를 입력하세요.`, '');
                             if (pw === null) return;
@@ -703,8 +708,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                             }
                             setNotice({ type: 'success', text: `'${u.name}' 비밀번호를 변경했습니다.` });
                           }}
-                          className="p-1.5 text-stone-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                          title="비밀번호 변경"
+                          className="p-1.5 text-stone-500 enabled:hover:text-blue-600 enabled:hover:bg-blue-50 rounded-lg transition-colors disabled:opacity-25 disabled:cursor-not-allowed"
+                          title={u.isMaster ? '마스터 비밀번호는 복구키로 변경합니다' : u.id === activeUserId ? '내 계정 탭에서 변경하세요' : '비밀번호 변경'}
                         >
                           <KeyRound className="w-3.5 h-3.5" />
                         </button>
@@ -762,6 +767,33 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       required
                     />
                   </div>
+                </div>
+
+                <div>
+                  <label className={labelClass}>계정 권한</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setNewIsAdmin(false)}
+                      className={`p-3 rounded-xl border text-left transition-colors ${
+                        !newIsAdmin ? 'border-blue-500 bg-blue-50 ring-1 ring-blue-200' : 'border-stone-200 bg-white hover:bg-stone-50'
+                      }`}
+                    >
+                      <span className="block text-xs font-extrabold text-stone-900">일반 권한</span>
+                      <span className="block mt-1 text-[10px] text-stone-500">본인 보드·일정·배치표 사용</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setNewIsAdmin(true)}
+                      className={`p-3 rounded-xl border text-left transition-colors ${
+                        newIsAdmin ? 'border-amber-500 bg-amber-50 ring-1 ring-amber-200' : 'border-stone-200 bg-white hover:bg-stone-50'
+                      }`}
+                    >
+                      <span className="flex items-center gap-1 text-xs font-extrabold text-stone-900"><ShieldCheck className="w-3.5 h-3.5 text-amber-600" />관리자 권한</span>
+                      <span className="block mt-1 text-[10px] text-stone-500">계정 생성·삭제·비밀번호 초기화 가능</span>
+                    </button>
+                  </div>
+                  <p className="mt-1.5 text-[10px] text-stone-500">관리자는 마스터와 같은 운영 권한을 갖지만 최초 마스터 계정과 복구키는 변경할 수 없습니다.</p>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
