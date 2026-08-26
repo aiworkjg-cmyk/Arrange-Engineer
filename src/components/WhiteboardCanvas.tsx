@@ -33,6 +33,7 @@ interface WhiteboardCanvasProps {
   /** 대시보드만 꽉 채워 보는 모드 */
   isBoardOnly: boolean;
   onToggleBoardOnly: () => void;
+  onMobileOrientationChange: (orientation: SiteSettings['mobileOrientation']) => void;
   selectedTokenIds: string[];
   focusTokenId: string | null;
   searchFilter: string;
@@ -144,6 +145,7 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
   isMobile,
   isBoardOnly,
   onToggleBoardOnly,
+  onMobileOrientationChange,
   selectedTokenIds,
   focusTokenId,
   searchFilter,
@@ -277,13 +279,7 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
   const zoomAt = useCallback(
     (nextZoom: number, anchorClientX?: number, anchorClientY?: number) => {
       const canvasRect = canvasRef.current?.getBoundingClientRect();
-      // 배경판 크기와 화면 크기의 조합과 관계없이 실제 100% 배율에 도달할 수 있어야 한다.
-      const actualSizeZoom = fitScale > 0 ? 1 / fitScale : 1;
-      const clamped = clamp(
-        nextZoom,
-        Math.min(MIN_ZOOM, actualSizeZoom),
-        Math.max(MAX_ZOOM, actualSizeZoom)
-      );
+      const clamped = clamp(nextZoom, MIN_ZOOM, MAX_ZOOM);
 
       setZoom((prevZoom) => {
         if (Math.abs(clamped - prevZoom) < 0.0001) return prevZoom;
@@ -315,12 +311,6 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
     },
     [fitScale, viewport.width, viewport.height, boardWidth, boardHeight]
   );
-
-  /** 실제 화면 배율 100% (1 논리px = 1 화면px) 로 맞추기 */
-  const applyActualSize = useCallback(() => {
-    if (fitScale <= 0) return;
-    zoomAt(1 / fitScale);
-  }, [fitScale, zoomAt]);
 
   /**
    * 배경 더블클릭 처리.
@@ -911,14 +901,11 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
           >
             <ZoomIn className="w-3.5 h-3.5" />
           </button>
-          <button
-            type="button"
-            onClick={applyActualSize}
-            className="px-2 py-1.5 text-[10px] sm:text-[11px] font-extrabold text-stone-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-            title="실제 크기 100% 로 보기"
-          >
-            100%
-          </button>
+          {isMobile && <>
+            <div className="w-px h-4 bg-stone-200 mx-0.5" />
+            <button type="button" onClick={() => onMobileOrientationChange('portrait')} aria-pressed={settings.mobileOrientation === 'portrait'} className={`px-2 py-1.5 text-[10px] font-extrabold rounded-lg transition-colors ${settings.mobileOrientation === 'portrait' ? 'bg-blue-600 text-white' : 'text-stone-600 hover:bg-blue-50'}`} title="모바일 세로 보기">세로</button>
+            <button type="button" onClick={() => onMobileOrientationChange('landscape')} aria-pressed={settings.mobileOrientation === 'landscape'} className={`px-2 py-1.5 text-[10px] font-extrabold rounded-lg transition-colors ${settings.mobileOrientation === 'landscape' ? 'bg-blue-600 text-white' : 'text-stone-600 hover:bg-blue-50'}`} title="모바일 가로 보기">가로</button>
+          </>}
           <button
             type="button"
             onClick={resetView}

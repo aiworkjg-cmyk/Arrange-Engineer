@@ -47,8 +47,8 @@ import { RosterSheetModal } from './components/RosterSheetModal';
 import { SettingsModal } from './components/SettingsModal';
 import { BoardSettingsModal } from './components/BoardSettingsModal';
 import { LoginScreen } from './components/LoginScreen';
-import { useIsMobile, useOrientation } from './hooks/useIsMobile';
-import { Smartphone, RotateCw, Monitor } from 'lucide-react';
+import { useIsMobile } from './hooks/useIsMobile';
+import { Smartphone, Monitor } from 'lucide-react';
 import { listSnapshots, replaceSnapshots } from './utils/snapshots';
 import {
   createCloudUser, deleteCloudUser, getCloudToken, loadCloud, loginCloud,
@@ -163,13 +163,28 @@ export default function App() {
   const isMobile = useIsMobile(settings.viewMode);
   /** 실제 창이 좁은지 (기기 자체가 모바일인지) */
   const isNarrowWindow = useIsMobile('auto');
-  const deviceOrientation = useOrientation();
   /** PC 창에서 '모바일 고정'을 골랐을 때만 휴대폰 모양 틀로 미리보기 */
   const isPhoneFrame = settings.viewMode === 'mobile' && !isNarrowWindow;
   const frameSize =
     settings.mobileOrientation === 'landscape'
       ? { width: 860, height: 430 }
       : { width: 420, height: 860 };
+
+  const handleMobileOrientationChange = useCallback(
+    (orientation: SiteSettings['mobileOrientation']) => {
+      updateSettings({ mobileOrientation: orientation });
+      if (!isNarrowWindow || typeof window === 'undefined') return;
+      const controller = window.screen.orientation as ScreenOrientation & {
+        lock?: (value: 'portrait' | 'landscape') => Promise<void>;
+      };
+      if (typeof controller?.lock === 'function') {
+        void controller.lock(orientation).catch(() => {
+          // 브라우저가 화면 고정을 허용하지 않아도 선택한 모바일 미리보기 방향은 유지한다.
+        });
+      }
+    },
+    [isNarrowWindow, updateSettings]
+  );
 
   // 3. 보드 상태 (히스토리 포함)
   const [history, dispatch] = useReducer(historyReducer, undefined, () => ({
@@ -1319,6 +1334,7 @@ export default function App() {
           isMobile={isMobile}
           isBoardOnly={isBoardOnly}
           onToggleBoardOnly={() => setIsBoardOnly((prev) => !prev)}
+          onMobileOrientationChange={handleMobileOrientationChange}
           selectedTokenIds={selectedTokenIds}
           focusTokenId={isAnyModalOpen ? null : focusTokenId}
           searchFilter={searchFilter}
@@ -1532,19 +1548,6 @@ export default function App() {
         <div className="flex items-center gap-2 text-xs font-semibold text-stone-600 whitespace-nowrap">
           <Smartphone className="w-4 h-4 shrink-0" />
           <span>모바일 미리보기</span>
-          <button
-            type="button"
-            onClick={() =>
-              updateSettings({
-                mobileOrientation:
-                  settings.mobileOrientation === 'portrait' ? 'landscape' : 'portrait'
-              })
-            }
-            className="px-2.5 py-1 rounded-lg bg-white border border-stone-300 hover:bg-stone-50 transition-colors flex items-center gap-1"
-          >
-            <RotateCw className="w-3.5 h-3.5 shrink-0" />
-            <span>{settings.mobileOrientation === 'portrait' ? '가로 모드' : '세로 모드'}</span>
-          </button>
           <button
             type="button"
             onClick={() => updateSettings({ viewMode: 'auto' })}

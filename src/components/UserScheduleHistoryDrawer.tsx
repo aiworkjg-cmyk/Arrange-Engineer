@@ -271,9 +271,8 @@ export const UserScheduleHistoryDrawer: React.FC<Props> = ({
     onAddSchedule({ kind: 'layout', snapshotId: snapshot.id, snapshotName: snapshot.name, userId: 'layout', userName: '배치', title: `배치 · ${snapshot.name}`, date: targetDate, endDate: targetDate, timeRange: '종일', zoneName: '전체 보드', role: '배치', status: 'scheduled', location: '저장된 배치표', notes: `${snapshot.tokenCount}개 모형 · ${snapshot.zoneCount}개 구역` });
     setLayoutSnapshotId('');
     if (revealDay) {
-      setDayPopupDate(null);
       setDayAddMode(null);
-      setSelectedDayDate(targetDate);
+      setSelectedDayDate(null);
     }
   };
   const registerLayout = () => {
@@ -282,6 +281,8 @@ export const UserScheduleHistoryDrawer: React.FC<Props> = ({
     setLayoutDate(null); setLayoutSnapshotId('');
   };
   const dayEvents = dayPopupDate ? allSchedulesForDate(dayPopupDate) : [];
+  const dayLayouts = dayEvents.filter(isLayout);
+  const dayInstallerSchedules = dayEvents.filter((schedule) => !isLayout(schedule));
   const selectedDayEvents = selectedDayDate ? allSchedulesForDate(selectedDayDate) : [];
   const selectedDayLayouts = selectedDayEvents.filter(isLayout);
   const selectedDayInstallerSchedules = selectedDayEvents.filter((schedule) => !isLayout(schedule));
@@ -291,7 +292,7 @@ export const UserScheduleHistoryDrawer: React.FC<Props> = ({
   return <div className="app-modal fixed inset-0 z-50 flex items-center justify-center p-3 bg-stone-900/50 backdrop-blur-xs">
     <div className="app-modal-panel w-full max-w-[1540px] h-[min(920px,95vh)] bg-white rounded-2xl shadow-2xl border border-stone-200 overflow-hidden flex flex-col" onClick={() => setContextMenu(null)}>
       <header className="px-5 py-4 border-b border-stone-200 bg-stone-50/80 flex items-center justify-between gap-3">
-        <div className="flex items-center gap-3"><div className="w-10 h-10 rounded-xl bg-violet-100 text-violet-700 flex items-center justify-center"><CalendarDays className="w-5 h-5" /></div><div><h2 className="font-extrabold text-stone-900">일정 캘린더</h2><p className="hidden lg:block text-xs text-stone-500">빈 날짜 더블클릭: 새 항목 등록 · 등록된 날짜 더블클릭: 우측 상세 확인 · 일정 우클릭: 수정/삭제</p></div></div>
+        <div className="flex items-center gap-3"><div className="w-10 h-10 rounded-xl bg-violet-100 text-violet-700 flex items-center justify-center"><CalendarDays className="w-5 h-5" /></div><div><h2 className="font-extrabold text-stone-900">일정 캘린더</h2><p className="hidden lg:block text-xs text-stone-500">날짜 빈 공간 더블클릭: 하단에서 등록 내역 확인·신규 등록 · 일정 더블클릭: 상세보기</p></div></div>
         <button type="button" onClick={onClose} aria-label="캘린더 닫기" className="p-2 rounded-full hover:bg-stone-200 text-stone-500"><X className="w-5 h-5" /></button>
       </header>
       <div className="px-4 py-2.5 border-b border-stone-200 bg-white flex flex-wrap items-center gap-2"><label className="relative min-w-48 flex-1 max-w-sm"><Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-stone-400" /><input value={scheduleQuery} onChange={(e) => setScheduleQuery(e.target.value)} placeholder="일정명, 기사, 위치, 설명 검색" className="w-full pl-8 pr-3 py-2 text-xs rounded-lg border border-stone-300" /></label><select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)} className="px-3 py-2 text-xs rounded-lg border border-stone-300 bg-white"><option value="all">전체 상태</option>{Object.entries(STATUS_LABELS).map(([id, label]) => <option key={id} value={id}>{label}</option>)}</select></div>
@@ -319,18 +320,14 @@ export const UserScheduleHistoryDrawer: React.FC<Props> = ({
             const openDay = () => {
               setLayoutSnapshotId('');
               setDayAddMode(null);
-              if (hasRegisteredItems) {
-                setSelectedDayDate(iso);
-                setSelectedScheduleId(null);
-                setEditor(null);
-                setLayoutDate(null);
-              } else {
-                setSelectedDayDate(null);
-                setDayPopupDate(iso);
-              }
+              setSelectedDayDate(null);
+              setSelectedScheduleId(null);
+              setEditor(null);
+              setLayoutDate(null);
+              setDayPopupDate(iso);
             };
-            const isSelectedDay = selectedDayDate === iso;
-            return <div key={iso} onClick={() => { if (hasRegisteredItems) { setSelectedDayDate(iso); setEditor(null); setLayoutDate(null); } }} onDoubleClick={openDay} title={hasRegisteredItems ? '클릭: 내역 보기 · 더블클릭: 자세히' : '더블클릭하여 배치 또는 기사 일정 추가'} className={`calendar-cell min-w-0 min-h-0 border-r border-b p-1.5 overflow-hidden cursor-pointer flex flex-col transition-colors ${isSelectedDay ? 'bg-violet-50 border-violet-300 ring-2 ring-inset ring-violet-500' : inMonth ? 'bg-white border-stone-100 hover:bg-violet-50/40' : 'bg-stone-50/70 border-stone-100'}`}>
+            const isSelectedDay = selectedDayDate === iso || dayPopupDate === iso;
+            return <div key={iso} onClick={() => { if (hasRegisteredItems) { setSelectedDayDate(iso); setEditor(null); setLayoutDate(null); } }} onDoubleClick={openDay} title="날짜 빈 공간을 더블클릭하여 등록 내역 확인 또는 신규 등록" className={`calendar-cell min-w-0 min-h-0 border-r border-b p-1.5 overflow-hidden cursor-pointer flex flex-col transition-colors ${isSelectedDay ? 'bg-violet-50 border-violet-300 ring-2 ring-inset ring-violet-500' : inMonth ? 'bg-white border-stone-100 hover:bg-violet-50/40' : 'bg-stone-50/70 border-stone-100'}`}>
               <div className={`w-6 h-6 flex items-center justify-center text-[11px] font-bold rounded-full mb-1 shrink-0 ${iso === todayIso() ? 'bg-violet-600 text-white' : isSelectedDay ? 'bg-violet-200 text-violet-900' : inMonth ? 'text-stone-700' : 'text-stone-300'}`}>{date.getDate()}</div>
               <div className="flex-1 min-h-0 space-y-0.5 overflow-hidden">
                 {layoutEvents.slice(0, 1).map((schedule) => <button key={schedule.id} type="button" onClick={(e) => { e.stopPropagation(); setSelectedScheduleId(schedule.id); setSelectedDayDate(iso); setEditor(null); setLayoutDate(null); }} onDoubleClick={(e) => { e.stopPropagation(); openSchedule(schedule); }} onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); setContextMenu({ scheduleId: schedule.id, x: e.clientX, y: e.clientY }); }} className={`calendar-event w-full text-left truncate border-l-4 px-1.5 py-0.5 rounded-r text-[9px] font-extrabold bg-amber-100 text-amber-950 border-amber-500 transition-all ${selectedScheduleId === schedule.id ? 'ring-2 ring-amber-600 shadow-sm scale-[1.02]' : 'hover:brightness-95'}`} title={`배치 · ${schedule.snapshotName || schedule.title}`}>배치 · {schedule.snapshotName || schedule.title}</button>)}
@@ -350,17 +347,26 @@ export const UserScheduleHistoryDrawer: React.FC<Props> = ({
         </aside>
       </div>
     </div>
-    {dayPopupDate && <div className="app-modal fixed inset-0 z-[65] flex items-center justify-center p-4 bg-stone-900/50" onMouseDown={(e) => { if (e.target === e.currentTarget) setDayPopupDate(null); }}>
-      <div className="app-modal-panel w-full max-w-3xl max-h-[92vh] bg-white rounded-2xl shadow-2xl overflow-hidden flex flex-col" onMouseDown={(e) => e.stopPropagation()}>
-        <header className="p-4 border-b flex items-center justify-between bg-stone-50"><div><h3 className="font-extrabold text-stone-900">{dayPopupDate} 새 항목 등록</h3><p className="text-xs text-stone-500">등록할 항목 종류를 선택하세요.</p></div><button type="button" onClick={() => { setDayPopupDate(null); setDayAddMode(null); }} aria-label="날짜 등록창 닫기" className="p-2 rounded-full hover:bg-stone-200"><X className="w-4 h-4" /></button></header>
-        <div className="overflow-y-auto custom-scrollbar p-4 bg-stone-50">
-          <div className="grid grid-cols-2 gap-3 mb-4">
-            <button type="button" onClick={() => setDayAddMode('layout')} className={`p-4 rounded-xl border-2 text-left ${dayAddMode === 'layout' ? 'border-amber-500 bg-amber-100' : 'border-amber-200 bg-white hover:bg-amber-50'}`}><FolderOpen className="w-5 h-5 text-amber-700 mb-2" /><span className="block text-sm font-extrabold text-amber-950">배치 등록</span><span className="block mt-1 text-[11px] text-amber-700">저장된 배치표 적용</span></button>
-            <button type="button" onClick={() => setDayAddMode('installer')} className={`p-4 rounded-xl border-2 text-left ${dayAddMode === 'installer' ? 'border-violet-500 bg-violet-100' : 'border-violet-200 bg-white hover:bg-violet-50'}`}><CalendarDays className="w-5 h-5 text-violet-700 mb-2" /><span className="block text-sm font-extrabold text-violet-950">기사 일정 등록</span><span className="block mt-1 text-[11px] text-violet-700">기사·기간·현장 입력</span></button>
-          </div>
-          {!dayAddMode && <div className="p-6 rounded-xl border border-dashed border-stone-300 bg-white text-center text-xs text-stone-500">위에서 배치 또는 기사 일정을 선택하면 입력창이 열립니다.</div>}
-          {dayAddMode === 'layout' && <section className="rounded-xl border-2 border-amber-200 bg-amber-50 p-4"><h4 className="text-sm font-extrabold text-amber-950 mb-1">배치 등록</h4><p className="text-[11px] text-amber-800 mb-3">저장한 배치표를 이 날짜에 등록합니다.</p>{snapshots.length ? <div className="space-y-2"><select value={layoutSnapshotId} onChange={(e) => setLayoutSnapshotId(e.target.value)} className={fieldClass}><option value="">저장 배치표 선택</option>{snapshots.map((snapshot) => <option key={snapshot.id} value={snapshot.id}>{snapshot.name}</option>)}</select><button type="button" disabled={!layoutSnapshotId} onClick={() => registerLayoutForDate(dayPopupDate, true)} className="w-full px-5 py-2.5 text-xs font-extrabold rounded-lg bg-amber-500 text-white disabled:opacity-40">배치 등록</button></div> : <p className="p-3 rounded-lg bg-white border border-amber-200 text-xs text-amber-900">먼저 배치표 저장/불러오기에서 배치표를 저장해 주세요.</p>}</section>}
-          {dayAddMode === 'installer' && <section className="rounded-xl border-2 border-violet-200 bg-white overflow-hidden"><ScheduleForm key={`day-${dayPopupDate}-${dayEvents.length}`} defaultDate={dayPopupDate} defaultInstallerId={defaultInstallerId} installers={installers} zones={zones} onCancel={() => { setDayPopupDate(null); setDayAddMode(null); }} onSubmit={(data) => { const targetDate = dayPopupDate; onAddSchedule(data); setDayPopupDate(null); setDayAddMode(null); setSelectedDayDate(targetDate); }} /></section>}
+    {dayPopupDate && <div className="fixed inset-x-0 bottom-0 z-[65] flex justify-center p-2 sm:p-3 pointer-events-none">
+      <div className="app-modal-panel pointer-events-auto w-full max-w-5xl max-h-[58vh] bg-white rounded-2xl shadow-[0_-12px_45px_rgba(28,25,23,0.28)] border border-stone-300 overflow-hidden flex flex-col">
+        <header className="px-4 py-3 border-b flex items-center justify-between bg-stone-50"><div><h3 className="font-extrabold text-stone-900">{dayPopupDate} 등록 내역 및 신규 등록</h3><p className="text-[11px] text-stone-500">배치 {dayLayouts.length}개 · 기사 일정 {dayInstallerSchedules.length}개</p></div><button type="button" onClick={() => { setDayPopupDate(null); setDayAddMode(null); }} aria-label="날짜 작업창 닫기" className="p-2 rounded-full hover:bg-stone-200"><X className="w-4 h-4" /></button></header>
+        <div className="min-h-0 overflow-y-auto custom-scrollbar grid grid-cols-1 md:grid-cols-[minmax(260px,0.85fr)_minmax(360px,1.15fr)] bg-stone-50">
+          <section className="p-3 sm:p-4 border-b md:border-b-0 md:border-r border-stone-200 space-y-3">
+            <h4 className="text-xs font-extrabold text-stone-800">등록된 건 확인</h4>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-1 gap-2">
+              <div className="rounded-xl border border-amber-200 bg-amber-50 p-2.5"><p className="text-[11px] font-extrabold text-amber-950 mb-2">배치 {dayLayouts.length}개</p>{dayLayouts.length ? <div className="space-y-1.5">{dayLayouts.map((schedule) => <button key={schedule.id} type="button" onDoubleClick={() => openSchedule(schedule)} onContextMenu={(e) => { e.preventDefault(); setContextMenu({ scheduleId: schedule.id, x: e.clientX, y: e.clientY }); }} className="w-full p-2 rounded-lg border border-amber-200 bg-white text-left"><span className="block text-xs font-bold text-amber-950 truncate">{schedule.snapshotName || schedule.title}</span><span className="block text-[9px] text-stone-500 mt-0.5">더블클릭 미리보기</span></button>)}</div> : <p className="text-[11px] text-amber-700">등록된 배치 없음</p>}</div>
+              <div className="rounded-xl border border-violet-200 bg-violet-50 p-2.5"><p className="text-[11px] font-extrabold text-violet-950 mb-2">기사 일정 {dayInstallerSchedules.length}개</p>{dayInstallerSchedules.length ? <div className="space-y-1.5">{dayInstallerSchedules.map((schedule) => <button key={schedule.id} type="button" onDoubleClick={() => openSchedule(schedule)} onContextMenu={(e) => { e.preventDefault(); setContextMenu({ scheduleId: schedule.id, x: e.clientX, y: e.clientY }); }} className="w-full p-2 rounded-lg border border-violet-200 bg-white text-left"><span className="block text-xs font-bold text-stone-900 truncate">{schedule.title}</span><span className="block text-[9px] text-stone-500 mt-0.5">{schedule.userName} · {schedule.timeRange}</span></button>)}</div> : <p className="text-[11px] text-violet-700">등록된 기사 일정 없음</p>}</div>
+            </div>
+          </section>
+          <section className="p-3 sm:p-4 min-h-0">
+            <div className="grid grid-cols-2 gap-2 mb-3">
+              <button type="button" onClick={() => setDayAddMode('layout')} className={`p-3 rounded-xl border-2 text-left ${dayAddMode === 'layout' ? 'border-amber-500 bg-amber-100' : 'border-amber-200 bg-white hover:bg-amber-50'}`}><FolderOpen className="w-4 h-4 text-amber-700 mb-1" /><span className="block text-xs font-extrabold text-amber-950">배치 신규 등록</span></button>
+              <button type="button" onClick={() => setDayAddMode('installer')} className={`p-3 rounded-xl border-2 text-left ${dayAddMode === 'installer' ? 'border-violet-500 bg-violet-100' : 'border-violet-200 bg-white hover:bg-violet-50'}`}><CalendarDays className="w-4 h-4 text-violet-700 mb-1" /><span className="block text-xs font-extrabold text-violet-950">기사 일정 신규 등록</span></button>
+            </div>
+            {!dayAddMode && <div className="p-5 rounded-xl border border-dashed border-stone-300 bg-white text-center text-xs text-stone-500">위에서 신규 등록 종류를 선택하세요.</div>}
+            {dayAddMode === 'layout' && <div className="rounded-xl border-2 border-amber-200 bg-amber-50 p-3">{snapshots.length ? <div className="space-y-2"><select value={layoutSnapshotId} onChange={(e) => setLayoutSnapshotId(e.target.value)} className={fieldClass}><option value="">저장 배치표 선택</option>{snapshots.map((snapshot) => <option key={snapshot.id} value={snapshot.id}>{snapshot.name}</option>)}</select><button type="button" disabled={!layoutSnapshotId} onClick={() => registerLayoutForDate(dayPopupDate, true)} className="w-full px-5 py-2.5 text-xs font-extrabold rounded-lg bg-amber-500 text-white disabled:opacity-40">배치 등록</button></div> : <p className="p-3 rounded-lg bg-white border border-amber-200 text-xs text-amber-900">먼저 배치표 저장/불러오기에서 배치표를 저장해 주세요.</p>}</div>}
+            {dayAddMode === 'installer' && <div className="rounded-xl border-2 border-violet-200 bg-white overflow-hidden"><ScheduleForm key={`day-${dayPopupDate}-${dayEvents.length}`} defaultDate={dayPopupDate} defaultInstallerId={defaultInstallerId} installers={installers} zones={zones} onCancel={() => setDayAddMode(null)} onSubmit={(data) => { onAddSchedule(data); setDayAddMode(null); setSelectedDayDate(null); }} /></div>}
+          </section>
         </div>
       </div>
     </div>}
