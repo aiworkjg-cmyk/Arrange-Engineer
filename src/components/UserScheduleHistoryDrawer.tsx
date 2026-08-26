@@ -67,9 +67,9 @@ const ScheduleForm: React.FC<ScheduleFormProps> = ({ schedule, defaultDate, defa
     <div><h3 className="font-bold text-stone-900">{schedule ? '일정 간편 수정' : '새 일정 배정'}</h3><p className="text-[11px] text-stone-500 mt-1">기간을 지정하면 여러 날짜에 걸쳐 표시됩니다.</p></div>
     <label className="block text-xs font-bold text-stone-700">시공기사<select value={installerId} onChange={(e) => setInstallerId(e.target.value)} className={`${fieldClass} mt-1`} required><option value="">기사 선택</option>{installers.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.role || '직책 미설정'}</option>)}</select></label>
     <label className="block text-xs font-bold text-stone-700">일정 / 현장명<input value={title} onChange={(e) => setTitle(e.target.value)} className={`${fieldClass} mt-1`} required autoFocus /></label>
-    <div className="grid grid-cols-2 gap-2"><label className="text-xs font-bold text-stone-700">시작일<input type="date" value={startDate} onChange={(e) => { setStartDate(e.target.value); if (e.target.value > endDate) setEndDate(e.target.value); }} className={`${fieldClass} mt-1`} /></label><label className="text-xs font-bold text-stone-700">종료일<input type="date" min={startDate} value={endDate} onChange={(e) => setEndDate(e.target.value)} className={`${fieldClass} mt-1`} /></label></div>
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2"><label className="text-xs font-bold text-stone-700">시작일<input type="date" value={startDate} onChange={(e) => { setStartDate(e.target.value); if (e.target.value > endDate) setEndDate(e.target.value); }} className={`${fieldClass} mt-1`} /></label><label className="text-xs font-bold text-stone-700">종료일<input type="date" min={startDate} value={endDate} onChange={(e) => setEndDate(e.target.value)} className={`${fieldClass} mt-1`} /></label></div>
     <label className="block text-xs font-bold text-stone-700">시간<input value={timeRange} onChange={(e) => setTimeRange(e.target.value)} className={`${fieldClass} mt-1`} /></label>
-    <div className="grid grid-cols-2 gap-2"><label className="text-xs font-bold text-stone-700">구역<select value={zoneId} onChange={(e) => setZoneId(e.target.value)} className={`${fieldClass} mt-1`}><option value="">미지정</option>{zones.map((zone) => <option key={zone.id} value={zone.id}>{zone.title}</option>)}</select></label><label className="text-xs font-bold text-stone-700">상태<select value={status} onChange={(e) => setStatus(e.target.value as ScheduleItem['status'])} className={`${fieldClass} mt-1`}>{Object.entries(STATUS_LABELS).map(([id, label]) => <option key={id} value={id}>{label}</option>)}</select></label></div>
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2"><label className="text-xs font-bold text-stone-700">구역<select value={zoneId} onChange={(e) => setZoneId(e.target.value)} className={`${fieldClass} mt-1`}><option value="">미지정</option>{zones.map((zone) => <option key={zone.id} value={zone.id}>{zone.title}</option>)}</select></label><label className="text-xs font-bold text-stone-700">상태<select value={status} onChange={(e) => setStatus(e.target.value as ScheduleItem['status'])} className={`${fieldClass} mt-1`}>{Object.entries(STATUS_LABELS).map(([id, label]) => <option key={id} value={id}>{label}</option>)}</select></label></div>
     <label className="block text-xs font-bold text-stone-700">현장 위치<input value={location} onChange={(e) => setLocation(e.target.value)} className={`${fieldClass} mt-1`} /></label>
     <label className="block text-xs font-bold text-stone-700">상세 설명<textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={4} className={`${fieldClass} mt-1 resize-none`} /></label>
     <div className="flex gap-2"><button type="button" onClick={onCancel} className="flex-1 py-2 text-xs font-bold rounded-lg bg-stone-200 text-stone-700">취소</button><button type="submit" className="flex-1 py-2 text-xs font-bold rounded-lg bg-violet-600 text-white">{schedule ? '수정 저장' : '일정 등록'}</button></div>
@@ -181,16 +181,75 @@ const ScaledBoardPreview: React.FC<{ snapshot: BoardSnapshot }> = ({ snapshot })
   );
 };
 
-const SnapshotPreview: React.FC<{ snapshot: BoardSnapshot; onClose: () => void; onApply: () => void }> = ({ snapshot, onClose, onApply }) => (
-  <div className="app-modal fixed inset-0 z-[75] flex items-center justify-center p-4 bg-stone-900/60" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-    <div className="app-modal-panel w-full max-w-6xl max-h-[92vh] bg-white rounded-2xl shadow-2xl border border-stone-200 overflow-hidden flex flex-col" onMouseDown={(event) => event.stopPropagation()}>
-      <header className="px-5 py-4 border-b border-stone-200 bg-amber-50 flex items-center justify-between gap-3"><div><h3 className="font-extrabold text-stone-900">배치 미리보기 · {snapshot.name}</h3><p className="text-xs text-stone-500 mt-1">캘린더는 뒤에 그대로 유지됩니다. 아래 화면은 읽기 전용입니다.</p></div><button type="button" onClick={onClose} aria-label="배치 미리보기 닫기" className="p-2 rounded-full hover:bg-amber-100 text-stone-500"><X className="w-5 h-5" /></button></header>
-      <div className="p-3 sm:p-5 overflow-auto bg-stone-100">
-        <ScaledBoardPreview snapshot={snapshot} />
+interface BottomPreviewShellProps {
+  title: string;
+  subtitle: string;
+  tone: 'amber' | 'violet';
+  closeLabel: string;
+  onClose: () => void;
+  children: React.ReactNode;
+  footer?: React.ReactNode;
+}
+
+const BottomPreviewShell: React.FC<BottomPreviewShellProps> = ({ title, subtitle, tone, closeLabel, onClose, children, footer }) => {
+  const headerClass = tone === 'amber' ? 'bg-amber-50' : 'bg-violet-50';
+  const hoverClass = tone === 'amber' ? 'hover:bg-amber-100' : 'hover:bg-violet-100';
+  return (
+    <div className="fixed inset-x-0 bottom-0 z-[75] flex justify-center px-2 pt-2 sm:px-3 sm:pt-3 pointer-events-none">
+      <div className="app-modal-panel pointer-events-auto w-full max-w-5xl max-h-[78vh] bg-white rounded-t-2xl shadow-[0_-16px_55px_rgba(28,25,23,0.32)] border border-b-0 border-stone-300 overflow-hidden flex flex-col">
+        <header className={`px-4 sm:px-5 py-3 border-b border-stone-200 flex items-center justify-between gap-3 ${headerClass}`}>
+          <div className="min-w-0"><h3 className="font-extrabold text-stone-900 truncate">{title}</h3><p className="text-[11px] sm:text-xs text-stone-500 mt-0.5">{subtitle}</p></div>
+          <button type="button" onClick={onClose} aria-label={closeLabel} className={`p-2 rounded-full text-stone-500 shrink-0 ${hoverClass}`}><X className="w-5 h-5" /></button>
+        </header>
+        <div className="min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain touch-pan-y bg-stone-100">{children}</div>
+        {footer && <footer className="px-3 sm:px-5 py-3 border-t border-stone-200 bg-white shrink-0">{footer}</footer>}
       </div>
-      <footer className="px-5 py-3 border-t border-stone-200 bg-white flex items-center justify-between"><span className="text-xs text-stone-500">모형 {snapshot.tokenCount}개 · 구역 {snapshot.zoneCount}개</span><div className="flex gap-2"><button type="button" onClick={onClose} className="px-4 py-2 text-xs font-bold rounded-lg bg-stone-100 text-stone-700">닫기</button><button type="button" onClick={onApply} className="px-4 py-2 text-xs font-extrabold rounded-lg bg-amber-500 text-white">이 배치를 대시보드에 적용</button></div></footer>
     </div>
-  </div>
+  );
+};
+
+const SnapshotPreview: React.FC<{ snapshot: BoardSnapshot; onClose: () => void; onApply: () => void }> = ({ snapshot, onClose, onApply }) => (
+  <BottomPreviewShell
+    title={`배치 미리보기 · ${snapshot.name}`}
+    subtitle="캘린더를 배경으로 유지한 읽기 전용 미리보기입니다."
+    tone="amber"
+    closeLabel="배치 미리보기 닫기"
+    onClose={onClose}
+    footer={<div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2"><span className="text-xs text-stone-500">모형 {snapshot.tokenCount}개 · 구역 {snapshot.zoneCount}개</span><div className="grid grid-cols-2 gap-2"><button type="button" onClick={onClose} className="px-4 py-2 text-xs font-bold rounded-lg bg-stone-100 text-stone-700">닫기</button><button type="button" onClick={onApply} className="px-4 py-2 text-xs font-extrabold rounded-lg bg-amber-500 text-white">대시보드에 적용</button></div></div>}
+  >
+    <div className="p-2 sm:p-4"><ScaledBoardPreview snapshot={snapshot} /></div>
+  </BottomPreviewShell>
+);
+
+interface SchedulePreviewProps {
+  schedule: ScheduleItem;
+  token?: MagnetToken;
+  onClose: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+  onLocateToken: () => void;
+}
+
+const SchedulePreview: React.FC<SchedulePreviewProps> = ({ schedule, token, onClose, onEdit, onDelete, onLocateToken }) => (
+  <BottomPreviewShell
+    title={`일정 상세 · ${schedule.title}`}
+    subtitle="배치 미리보기와 같은 하단창에서 일정 내용을 확인합니다."
+    tone="violet"
+    closeLabel="일정 상세 닫기"
+    onClose={onClose}
+    footer={<div className="grid grid-cols-2 sm:flex sm:justify-end gap-2"><button type="button" onClick={onEdit} className="px-4 py-2 text-xs font-bold rounded-lg bg-violet-600 text-white">간편 수정</button><button type="button" onClick={onDelete} className="px-4 py-2 text-xs font-bold rounded-lg bg-rose-100 text-rose-700">삭제</button></div>}
+  >
+    <div className="p-3 sm:p-5 space-y-3 bg-white">
+      <div className="flex flex-wrap items-center gap-2"><span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${STATUS_STYLES[schedule.status]}`}>{STATUS_LABELS[schedule.status]}</span><span className="text-xs font-extrabold text-violet-700">{schedule.userName} · {schedule.role}</span></div>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs text-stone-700">
+        <p className="flex items-start gap-2 p-3 rounded-xl bg-stone-50 border border-stone-200"><CalendarDays className="w-4 h-4 shrink-0 text-violet-600" /><span>{schedule.date}{schedule.endDate && schedule.endDate !== schedule.date ? ` ~ ${schedule.endDate}` : ''}</span></p>
+        <p className="flex items-start gap-2 p-3 rounded-xl bg-stone-50 border border-stone-200"><Clock className="w-4 h-4 shrink-0 text-violet-600" /><span>{schedule.timeRange}</span></p>
+        <p className="flex items-start gap-2 p-3 rounded-xl bg-stone-50 border border-stone-200"><MapPin className="w-4 h-4 shrink-0 text-violet-600" /><span>{schedule.location} · {schedule.zoneName}</span></p>
+      </div>
+      <div className="p-3 rounded-xl bg-violet-50 border border-violet-200 text-xs whitespace-pre-wrap text-stone-700">{schedule.notes || '상세 설명 없음'}</div>
+      {token && <button type="button" onClick={onLocateToken} className="w-full py-2.5 text-xs font-bold rounded-lg border border-blue-300 bg-blue-50 text-blue-700">대시보드에서 모형 찾기</button>}
+    </div>
+  </BottomPreviewShell>
 );
 
 export const UserScheduleHistoryDrawer: React.FC<Props> = ({
@@ -211,6 +270,7 @@ export const UserScheduleHistoryDrawer: React.FC<Props> = ({
   const [dayAddMode, setDayAddMode] = useState<'layout' | 'installer' | null>(null);
   const [selectedDayDate, setSelectedDayDate] = useState<string | null>(null);
   const [previewSnapshot, setPreviewSnapshot] = useState<BoardSnapshot | null>(null);
+  const [previewScheduleId, setPreviewScheduleId] = useState<string | null>(null);
   const [contextMenu, setContextMenu] = useState<{ scheduleId: string; x: number; y: number } | null>(null);
   useEscapeClose(isOpen, onClose);
 
@@ -219,7 +279,7 @@ export const UserScheduleHistoryDrawer: React.FC<Props> = ({
     const sourceToken = initialTokenId ? tokens.find((token) => token.id === initialTokenId) : undefined;
     const match = installers.find((item) => item.id === initialTokenId) || installers.find((item) => item.id === sourceToken?.assignedUserId || item.name === sourceToken?.title);
     setSelectedInstallerId(match?.id || 'all');
-    setEditor(null); setLayoutDate(null); setSelectedScheduleId(null); setContextMenu(null); setDayPopupDate(null); setDayAddMode(null); setSelectedDayDate(null); setPreviewSnapshot(null);
+    setEditor(null); setLayoutDate(null); setSelectedScheduleId(null); setContextMenu(null); setDayPopupDate(null); setDayAddMode(null); setSelectedDayDate(null); setPreviewSnapshot(null); setPreviewScheduleId(null);
   }, [initialTokenId, installers, isOpen, tokens]);
 
   const matchesInstaller = (schedule: ScheduleItem, installer: InstallerProfile) => schedule.userId === installer.id || schedule.userName === installer.name;
@@ -247,21 +307,25 @@ export const UserScheduleHistoryDrawer: React.FC<Props> = ({
 
   if (!isOpen) return null;
   const selectedSchedule = allSchedules.find((item) => item.id === selectedScheduleId);
+  const previewSchedule = allSchedules.find((item) => item.id === previewScheduleId && !isLayout(item));
   const editingSchedule = editor?.scheduleId ? allSchedules.find((item) => item.id === editor.scheduleId) : undefined;
   const defaultInstallerId = selectedInstallerId === 'all' || selectedInstallerId === 'layouts' ? undefined : selectedInstallerId;
   const schedulesForDate = (date: string) => filteredSchedules.filter((item) => date >= item.date && date <= (item.endDate || item.date)).sort(layoutFirst);
   const allSchedulesForDate = (date: string) => allSchedules.filter((item) => date >= item.date && date <= (item.endDate || item.date)).sort(layoutFirst);
   const openSchedule = (schedule: ScheduleItem) => {
+    setDayPopupDate(null); setDayAddMode(null); setSelectedDayDate(null); setContextMenu(null);
     if (isLayout(schedule)) {
+      setPreviewScheduleId(null);
       const snapshot = snapshots.find((item) => item.id === schedule.snapshotId);
       if (snapshot) setPreviewSnapshot(snapshot); else window.alert('연결된 저장 배치표가 삭제되어 미리볼 수 없습니다.');
     } else {
-      setSelectedScheduleId(schedule.id); setEditor(null); setLayoutDate(null); setDayPopupDate(null); setSelectedDayDate(null);
+      setPreviewSnapshot(null); setSelectedScheduleId(null); setPreviewScheduleId(schedule.id); setEditor(null); setLayoutDate(null);
     }
   };
   const deleteSchedule = (scheduleId: string) => {
     if (!onDeleteSchedule(scheduleId)) return;
     if (selectedScheduleId === scheduleId) setSelectedScheduleId(null);
+    if (previewScheduleId === scheduleId) setPreviewScheduleId(null);
     if (editor?.scheduleId === scheduleId) setEditor(null);
     setContextMenu(null);
   };
@@ -288,6 +352,7 @@ export const UserScheduleHistoryDrawer: React.FC<Props> = ({
   const selectedDayInstallerSchedules = selectedDayEvents.filter((schedule) => !isLayout(schedule));
   const layoutCount = allSchedules.filter(isLayout).length;
   const installerScheduleCount = allSchedules.length - layoutCount;
+  const previewToken = previewSchedule ? tokens.find((item) => item.assignedUserId === previewSchedule.userId || item.title === previewSchedule.userName) : undefined;
 
   return <div className="app-modal fixed inset-0 z-50 flex items-center justify-center p-3 bg-stone-900/50 backdrop-blur-xs">
     <div className="app-modal-panel w-full max-w-[1540px] h-[min(920px,95vh)] bg-white rounded-2xl shadow-2xl border border-stone-200 overflow-hidden flex flex-col" onClick={() => setContextMenu(null)}>
@@ -347,23 +412,22 @@ export const UserScheduleHistoryDrawer: React.FC<Props> = ({
         </aside>
       </div>
     </div>
-    {dayPopupDate && <div className="fixed inset-x-0 bottom-0 z-[65] flex justify-center p-2 sm:p-3 pointer-events-none">
-      <div className="app-modal-panel pointer-events-auto w-full max-w-5xl max-h-[58vh] bg-white rounded-2xl shadow-[0_-12px_45px_rgba(28,25,23,0.28)] border border-stone-300 overflow-hidden flex flex-col">
+    {dayPopupDate && <div className="fixed inset-x-0 bottom-0 z-[65] flex justify-center px-2 pt-2 sm:px-3 sm:pt-3 pointer-events-none">
+      <div className="app-modal-panel pointer-events-auto w-full max-w-2xl max-h-[68vh] bg-white rounded-t-2xl shadow-[0_-12px_45px_rgba(28,25,23,0.28)] border border-b-0 border-stone-300 overflow-hidden flex flex-col">
         <header className="px-4 py-3 border-b flex items-center justify-between bg-stone-50"><div><h3 className="font-extrabold text-stone-900">{dayPopupDate} 등록 내역 및 신규 등록</h3><p className="text-[11px] text-stone-500">배치 {dayLayouts.length}개 · 기사 일정 {dayInstallerSchedules.length}개</p></div><button type="button" onClick={() => { setDayPopupDate(null); setDayAddMode(null); }} aria-label="날짜 작업창 닫기" className="p-2 rounded-full hover:bg-stone-200"><X className="w-4 h-4" /></button></header>
-        <div className="min-h-0 overflow-y-auto custom-scrollbar grid grid-cols-1 md:grid-cols-[minmax(260px,0.85fr)_minmax(360px,1.15fr)] bg-stone-50">
-          <section className="p-3 sm:p-4 border-b md:border-b-0 md:border-r border-stone-200 space-y-3">
+        <div className="min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain touch-pan-y custom-scrollbar bg-stone-50">
+          <section className="p-3 sm:p-4 border-b border-stone-200 space-y-3">
             <h4 className="text-xs font-extrabold text-stone-800">등록된 건 확인</h4>
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-1 gap-2">
-              <div className="rounded-xl border border-amber-200 bg-amber-50 p-2.5"><p className="text-[11px] font-extrabold text-amber-950 mb-2">배치 {dayLayouts.length}개</p>{dayLayouts.length ? <div className="space-y-1.5">{dayLayouts.map((schedule) => <button key={schedule.id} type="button" onDoubleClick={() => openSchedule(schedule)} onContextMenu={(e) => { e.preventDefault(); setContextMenu({ scheduleId: schedule.id, x: e.clientX, y: e.clientY }); }} className="w-full p-2 rounded-lg border border-amber-200 bg-white text-left"><span className="block text-xs font-bold text-amber-950 truncate">{schedule.snapshotName || schedule.title}</span><span className="block text-[9px] text-stone-500 mt-0.5">더블클릭 미리보기</span></button>)}</div> : <p className="text-[11px] text-amber-700">등록된 배치 없음</p>}</div>
-              <div className="rounded-xl border border-violet-200 bg-violet-50 p-2.5"><p className="text-[11px] font-extrabold text-violet-950 mb-2">기사 일정 {dayInstallerSchedules.length}개</p>{dayInstallerSchedules.length ? <div className="space-y-1.5">{dayInstallerSchedules.map((schedule) => <button key={schedule.id} type="button" onDoubleClick={() => openSchedule(schedule)} onContextMenu={(e) => { e.preventDefault(); setContextMenu({ scheduleId: schedule.id, x: e.clientX, y: e.clientY }); }} className="w-full p-2 rounded-lg border border-violet-200 bg-white text-left"><span className="block text-xs font-bold text-stone-900 truncate">{schedule.title}</span><span className="block text-[9px] text-stone-500 mt-0.5">{schedule.userName} · {schedule.timeRange}</span></button>)}</div> : <p className="text-[11px] text-violet-700">등록된 기사 일정 없음</p>}</div>
-            </div>
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-2.5"><p className="text-[11px] font-extrabold text-amber-950 mb-2">배치 {dayLayouts.length}개</p>{dayLayouts.length ? <div className="space-y-1.5">{dayLayouts.map((schedule) => <button key={schedule.id} type="button" onClick={() => openSchedule(schedule)} onContextMenu={(e) => { e.preventDefault(); setContextMenu({ scheduleId: schedule.id, x: e.clientX, y: e.clientY }); }} className="w-full p-2 rounded-lg border border-amber-200 bg-white text-left"><span className="block text-xs font-bold text-amber-950 truncate">{schedule.snapshotName || schedule.title}</span><span className="block text-[9px] text-stone-500 mt-0.5">눌러서 배치 미리보기</span></button>)}</div> : <p className="text-[11px] text-amber-700">등록된 배치 없음</p>}</div>
+            <div className="rounded-xl border border-violet-200 bg-violet-50 p-2.5"><p className="text-[11px] font-extrabold text-violet-950 mb-2">기사 일정 {dayInstallerSchedules.length}개</p>{dayInstallerSchedules.length ? <div className="space-y-1.5">{dayInstallerSchedules.map((schedule) => <button key={schedule.id} type="button" onClick={() => openSchedule(schedule)} onContextMenu={(e) => { e.preventDefault(); setContextMenu({ scheduleId: schedule.id, x: e.clientX, y: e.clientY }); }} className="w-full p-2 rounded-lg border border-violet-200 bg-white text-left"><span className="block text-xs font-bold text-stone-900 truncate">{schedule.title}</span><span className="block text-[9px] text-stone-500 mt-0.5">{schedule.userName} · {schedule.timeRange} · 눌러서 상세보기</span></button>)}</div> : <p className="text-[11px] text-violet-700">등록된 기사 일정 없음</p>}</div>
           </section>
-          <section className="p-3 sm:p-4 min-h-0">
-            <div className="grid grid-cols-2 gap-2 mb-3">
+          <section className="p-3 sm:p-4 space-y-3">
+            <h4 className="text-xs font-extrabold text-stone-800">신규 등록</h4>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <button type="button" onClick={() => setDayAddMode('layout')} className={`p-3 rounded-xl border-2 text-left ${dayAddMode === 'layout' ? 'border-amber-500 bg-amber-100' : 'border-amber-200 bg-white hover:bg-amber-50'}`}><FolderOpen className="w-4 h-4 text-amber-700 mb-1" /><span className="block text-xs font-extrabold text-amber-950">배치 신규 등록</span></button>
               <button type="button" onClick={() => setDayAddMode('installer')} className={`p-3 rounded-xl border-2 text-left ${dayAddMode === 'installer' ? 'border-violet-500 bg-violet-100' : 'border-violet-200 bg-white hover:bg-violet-50'}`}><CalendarDays className="w-4 h-4 text-violet-700 mb-1" /><span className="block text-xs font-extrabold text-violet-950">기사 일정 신규 등록</span></button>
             </div>
-            {!dayAddMode && <div className="p-5 rounded-xl border border-dashed border-stone-300 bg-white text-center text-xs text-stone-500">위에서 신규 등록 종류를 선택하세요.</div>}
+            {!dayAddMode && <div className="p-4 rounded-xl border border-dashed border-stone-300 bg-white text-center text-xs text-stone-500">신규 등록할 종류를 선택하세요.</div>}
             {dayAddMode === 'layout' && <div className="rounded-xl border-2 border-amber-200 bg-amber-50 p-3">{snapshots.length ? <div className="space-y-2"><select value={layoutSnapshotId} onChange={(e) => setLayoutSnapshotId(e.target.value)} className={fieldClass}><option value="">저장 배치표 선택</option>{snapshots.map((snapshot) => <option key={snapshot.id} value={snapshot.id}>{snapshot.name}</option>)}</select><button type="button" disabled={!layoutSnapshotId} onClick={() => registerLayoutForDate(dayPopupDate, true)} className="w-full px-5 py-2.5 text-xs font-extrabold rounded-lg bg-amber-500 text-white disabled:opacity-40">배치 등록</button></div> : <p className="p-3 rounded-lg bg-white border border-amber-200 text-xs text-amber-900">먼저 배치표 저장/불러오기에서 배치표를 저장해 주세요.</p>}</div>}
             {dayAddMode === 'installer' && <div className="rounded-xl border-2 border-violet-200 bg-white overflow-hidden"><ScheduleForm key={`day-${dayPopupDate}-${dayEvents.length}`} defaultDate={dayPopupDate} defaultInstallerId={defaultInstallerId} installers={installers} zones={zones} onCancel={() => setDayAddMode(null)} onSubmit={(data) => { onAddSchedule(data); setDayAddMode(null); setSelectedDayDate(null); }} /></div>}
           </section>
@@ -371,6 +435,7 @@ export const UserScheduleHistoryDrawer: React.FC<Props> = ({
       </div>
     </div>}
     {previewSnapshot && <SnapshotPreview snapshot={previewSnapshot} onClose={() => setPreviewSnapshot(null)} onApply={() => { onApplySnapshot(previewSnapshot); setPreviewSnapshot(null); }} />}
+    {previewSchedule && <SchedulePreview schedule={previewSchedule} token={previewToken} onClose={() => setPreviewScheduleId(null)} onEdit={() => { setPreviewScheduleId(null); setEditor({ scheduleId: previewSchedule.id }); }} onDelete={() => deleteSchedule(previewSchedule.id)} onLocateToken={() => { if (!previewToken) return; setPreviewScheduleId(null); onLocateToken(previewToken.id); onClose(); }} />}
     {contextMenu && (() => { const schedule = allSchedules.find((item) => item.id === contextMenu.scheduleId); if (!schedule) return null; return <div className="fixed z-[80] w-44 bg-white rounded-xl shadow-2xl border border-stone-200 py-1" style={{ left: Math.min(contextMenu.x, window.innerWidth - 190), top: Math.min(contextMenu.y, window.innerHeight - 180) }} onClick={(e) => e.stopPropagation()}>{isLayout(schedule) ? <button type="button" onClick={() => { openSchedule(schedule); setContextMenu(null); }} className="w-full px-3 py-2 text-left text-xs font-bold hover:bg-amber-50 flex items-center gap-2"><FolderOpen className="w-3.5 h-3.5" />배치 미리보기</button> : <button type="button" onClick={() => { setSelectedDayDate(null); setEditor({ scheduleId: schedule.id }); setDayPopupDate(null); setContextMenu(null); }} className="w-full px-3 py-2 text-left text-xs font-bold hover:bg-stone-50">간편 수정</button>}<button type="button" onClick={() => deleteSchedule(schedule.id)} className="w-full px-3 py-2 text-left text-xs font-bold text-rose-700 hover:bg-rose-50 flex items-center gap-2"><Trash2 className="w-3.5 h-3.5" />삭제</button></div>; })()}
   </div>;
 };
