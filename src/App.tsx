@@ -357,15 +357,22 @@ export default function App() {
       setSessionUserId(payload.user.id);
       saveActiveUserId(payload.user.id);
       const nextState = payload.state || getBoardStateForUser(payload.user.id);
+      skipNextSaveRef.current = true;
       dispatch({ type: 'load', state: nextState });
       saveBoardStateForUser(payload.user.id, nextState);
       const nextSnapshots = payload.snapshots || listSnapshots(payload.user.id);
       replaceSnapshots(payload.user.id, nextSnapshots);
       setSnapshots(nextSnapshots);
       if (payload.settings) {
-        const nextSettings = normalizeSiteSettings(payload.settings);
-        setSettings(nextSettings);
-        saveSiteSettings(nextSettings);
+        setSettings((prev) => {
+          const next = normalizeSiteSettings({
+            ...payload.settings,
+            viewMode: prev.viewMode,
+            mobileOrientation: prev.mobileOrientation
+          });
+          saveSiteSettings(next);
+          return next;
+        });
       }
       setCloudReady(true);
     });
@@ -375,6 +382,12 @@ export default function App() {
   // 보드·캘린더·배치표·설정을 한 묶음으로 계정별 저장한다.
   useEffect(() => {
     if (!isLoggedIn || !cloudToken || !cloudReady) return;
+    // 원격에서 막 내려받아 반영된 상태라면 다시 올리지 않는다 (되돌림 루프 방지)
+    if (skipNextSaveRef.current) {
+      skipNextSaveRef.current = false;
+      return;
+    }
+
     pendingSaveRef.current = true;
     const timer = window.setTimeout(() => {
       void saveCloud(cloudToken, boardState, snapshots, settings).then((result) => {
@@ -395,6 +408,12 @@ export default function App() {
    */
   const lastSyncedAtRef = useRef<string | null>(null);
   const pendingSaveRef = useRef(false);
+  const boardStateRef = useRef(boardState);
+  boardStateRef.current = boardState;
+  const snapshotsRef = useRef(snapshots);
+  snapshotsRef.current = snapshots;
+  /** 방금 원격 내용을 받아 적용했으면, 그로 인해 생긴 저장은 건너뛴다 */
+  const skipNextSaveRef = useRef(false);
 
   useEffect(() => {
     if (!isLoggedIn || !cloudToken || !cloudReady) return;
@@ -421,6 +440,7 @@ export default function App() {
         saveAllUsers(payload.users);
       }
       if (payload.state) {
+        skipNextSaveRef.current = true;
         dispatch({ type: 'load', state: payload.state });
         saveBoardStateForUser(payload.user.id, payload.state);
       }
@@ -429,9 +449,16 @@ export default function App() {
         setSnapshots(payload.snapshots);
       }
       if (payload.settings) {
-        const nextSettings = normalizeSiteSettings(payload.settings);
-        setSettings(nextSettings);
-        saveSiteSettings(nextSettings);
+        // 화면 모드(PC/모바일)와 미리보기 방향은 기기마다 다르게 쓰는 값이라 동기화하지 않는다
+        setSettings((prev) => {
+          const next = normalizeSiteSettings({
+            ...payload.settings,
+            viewMode: prev.viewMode,
+            mobileOrientation: prev.mobileOrientation
+          });
+          saveSiteSettings(next);
+          return next;
+        });
       }
     };
 
@@ -469,6 +496,39 @@ export default function App() {
       window.removeEventListener('keydown', markActive);
     };
   }, [cloudReady, cloudToken, isLoggedIn]);
+
+  /*
+   * 조용한 로컬 백업.
+   * 브라우저는 보안상 사용자 PC의 특정 경로에 파일을 몰래 쓸 수 없어(권한 필요),
+   * 대신 같은 키에 계속 덮어쓰는 방식으로 브라우저 저장소에 백업본을 남긴다.
+   * 알림은 띄우지 않으며, 필요할 때 개발자 도구나 [배치표 저장/불러오기 > 파일로 내보내기]로 꺼낼 수 있다.
+   */
+  useEffect(() => {
+    if (!isLoggedIn) return;
+
+    const writeBackup = () => {
+      try {
+        localStorage.setItem(
+          `magnet_board_backup_${activeUser.id}`,
+          JSON.stringify({
+            savedAt: new Date().toISOString(),
+            account: activeUser.loginId || activeUser.id,
+            state: boardStateRef.current,
+            snapshots: snapshotsRef.current
+          })
+        );
+      } catch {
+        // 저장 공간이 가득 찼거나 접근이 막혀도 사용자 작업을 방해하지 않는다
+      }
+    };
+
+    writeBackup();
+    window.addEventListener('pagehide', writeBackup);
+    return () => {
+      writeBackup();
+      window.removeEventListener('pagehide', writeBackup);
+    };
+  }, [isLoggedIn, activeUser.id, activeUser.loginId]);
 
   // 대시보드 제목을 브라우저 탭 제목에도 반영
   useEffect(() => {
@@ -1584,6 +1644,7 @@ export default function App() {
 
       <UserScheduleHistoryDrawer
         isOpen={isScheduleDrawerOpen}
+        isMobile={isMobile}
         allSchedules={boardState.schedules}
         installers={boardState.installers}
         tokens={boardState.tokens}
