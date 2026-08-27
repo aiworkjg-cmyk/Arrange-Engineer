@@ -47,7 +47,7 @@ import { RosterSheetModal } from './components/RosterSheetModal';
 import { SettingsModal } from './components/SettingsModal';
 import { BoardSettingsModal } from './components/BoardSettingsModal';
 import { LoginScreen } from './components/LoginScreen';
-import { useIsMobile } from './hooks/useIsMobile';
+import { useIsMobile, useIsPhoneDevice } from './hooks/useIsMobile';
 import { Smartphone, Monitor } from 'lucide-react';
 import { listSnapshots, replaceSnapshots } from './utils/snapshots';
 import {
@@ -110,6 +110,14 @@ function historyReducer(state: HistoryState, action: HistoryAction): HistoryStat
   }
 }
 
+/** 휴대폰에서 'PC 버전' 을 볼 때 기준이 되는 데스크톱 가로 폭 */
+const DESKTOP_VIEW_WIDTH = 1280;
+
+/** 다른 기기 변경 사항을 확인하는 간격 (조작 중일 때만 동작) */
+const SYNC_INTERVAL_MS = 4000;
+/** 마지막 조작 후 이 시간까지만 '사용 중'으로 보고 확인한다 */
+const ACTIVE_WINDOW_MS = 120000;
+
 const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n));
 const round1 = (n: number) => Number(n.toFixed(1));
 const GUEST_USER: UserAccount = {
@@ -161,10 +169,10 @@ export default function App() {
 
   // 화면 모드 (자동 / PC 고정 / 모바일 고정)
   const isMobile = useIsMobile(settings.viewMode);
-  /** 실제 창이 좁은지 (기기 자체가 모바일인지) */
-  const isNarrowWindow = useIsMobile('auto');
+  /** 실제 휴대폰/태블릿인지 (viewport 설정에 흔들리지 않는 기준) */
+  const isPhoneDevice = useIsPhoneDevice();
   /** PC 창에서 '모바일 고정'을 골랐을 때만 휴대폰 모양 틀로 미리보기 */
-  const isPhoneFrame = settings.viewMode === 'mobile' && !isNarrowWindow;
+  const isPhoneFrame = settings.viewMode === 'mobile' && !isPhoneDevice;
   const frameSize =
     settings.mobileOrientation === 'landscape'
       ? { width: 860, height: 430 }
@@ -173,7 +181,7 @@ export default function App() {
   const handleMobileOrientationChange = useCallback(
     (orientation: SiteSettings['mobileOrientation']) => {
       updateSettings({ mobileOrientation: orientation });
-      if (!isNarrowWindow || typeof window === 'undefined') return;
+      if (!isPhoneDevice || typeof window === 'undefined') return;
       const controller = window.screen.orientation as ScreenOrientation & {
         lock?: (value: 'portrait' | 'landscape') => Promise<void>;
       };
@@ -183,7 +191,7 @@ export default function App() {
         });
       }
     },
-    [isNarrowWindow, updateSettings]
+    [isPhoneDevice, updateSettings]
   );
 
   /*
@@ -196,14 +204,22 @@ export default function App() {
     const meta = document.querySelector('meta[name="viewport"]');
     if (!meta) return;
 
-    const forceDesktop = settings.viewMode === 'desktop' && isNarrowWindow;
+    const forceDesktop = settings.viewMode === 'desktop' && isPhoneDevice;
+
+    if (!forceDesktop) {
+      meta.setAttribute('content', 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no');
+      return;
+    }
+
+    // PC 레이아웃(1280px)이 휴대폰 화면 폭에 통째로 들어오도록 배율을 계산한다.
+    // 다른 사이트의 'PC 버전으로 보기' 와 같은 방식이며, 손가락으로 확대·이동할 수 있다.
+    const deviceWidth = Math.min(window.screen.width, window.screen.height) || 390;
+    const fit = Math.max(0.2, Math.min(1, deviceWidth / DESKTOP_VIEW_WIDTH));
     meta.setAttribute(
       'content',
-      forceDesktop
-        ? 'width=1280, initial-scale=0.3, minimum-scale=0.2, maximum-scale=3, user-scalable=yes'
-        : 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no'
+      `width=${DESKTOP_VIEW_WIDTH}, initial-scale=${fit.toFixed(3)}, minimum-scale=${(fit * 0.6).toFixed(3)}, maximum-scale=3, user-scalable=yes`
     );
-  }, [settings.viewMode, isNarrowWindow]);
+  }, [settings.viewMode, isPhoneDevice]);
 
   // 3. 보드 상태 (히스토리 포함)
   const [history, dispatch] = useReducer(historyReducer, undefined, () => ({
@@ -419,16 +435,38 @@ export default function App() {
       }
     };
 
-    const timer = window.setInterval(() => void pull(), 15000);
-    const onVisible = () => {
-      if (document.visibilityState === 'visible') void pull();
+    /*
+     * 사용 중일 때만 자주 확인한다.
+     * - 최근 2분 안에 조작이 있었으면 4초 간격 (거의 즉시 반영되는 느낌)
+     * - 그 뒤로는 확인을 멈춘다 → 탭을 하루 종일 켜둬도 요청이 쌓이지 않는다
+     * - 화면을 다시 보거나 조작하면 즉시 한 번 확인하고 다시 4초 간격으로 돌아간다
+     */
+    let lastActiveAt = Date.now();
+    const markActive = () => {
+      const wasIdle = Date.now() - lastActiveAt > ACTIVE_WINDOW_MS;
+      lastActiveAt = Date.now();
+      if (wasIdle) void pull();
     };
+
+    const timer = window.setInterval(() => {
+      if (Date.now() - lastActiveAt > ACTIVE_WINDOW_MS) return;
+      void pull();
+    }, SYNC_INTERVAL_MS);
+
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') markActive();
+    };
+
     document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('pointerdown', markActive, { passive: true });
+    window.addEventListener('keydown', markActive);
 
     return () => {
       cancelled = true;
       window.clearInterval(timer);
       document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('pointerdown', markActive);
+      window.removeEventListener('keydown', markActive);
     };
   }, [cloudReady, cloudToken, isLoggedIn]);
 
@@ -1622,6 +1660,7 @@ export default function App() {
         users={users}
         activeUser={activeUser}
         activeUserId={activeUserId}
+        isPhoneDevice={isPhoneDevice}
         onClose={() => setIsSettingsOpen(false)}
         onUpdateSettings={updateSettings}
         onResetSettings={resetSettings}

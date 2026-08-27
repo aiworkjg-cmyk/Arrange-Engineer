@@ -29,6 +29,8 @@ interface SettingsModalProps {
   users: UserAccount[];
   activeUser: UserAccount;
   activeUserId: string;
+  /** 실제 휴대폰/태블릿에서 열렸는지 (미리보기 전용 항목을 감추는 데 사용) */
+  isPhoneDevice: boolean;
   onClose: () => void;
   onUpdateSettings: (patch: Partial<SiteSettings>) => void;
   onResetSettings: () => void;
@@ -61,6 +63,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   users,
   activeUser,
   activeUserId,
+  isPhoneDevice,
   onClose,
   onUpdateSettings,
   onResetSettings,
@@ -596,10 +599,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
                 <p className="mt-1.5 text-[11px] text-stone-500">
                   자동은 창 너비로 판단합니다. PC에서 [모바일]을 고르면 휴대폰 화면으로 미리볼 수 있고,
-                  데이터는 PC와 그대로 이어집니다.
+                  휴대폰에서 [PC 고정]을 고르면 PC 화면 전체를 축소해서 봅니다. 데이터는 항상 같이 이어집니다.
                 </p>
 
-                {settings.viewMode === 'mobile' && (
+                {settings.viewMode === 'mobile' && !isPhoneDevice && (
                   <div className="mt-2">
                     <label className={labelClass}>모바일 미리보기 방향</label>
                     <div className="grid grid-cols-2 gap-2">
