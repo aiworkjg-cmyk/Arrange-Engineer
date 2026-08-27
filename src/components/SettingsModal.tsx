@@ -19,8 +19,7 @@ import {
   FolderOpen,
   RefreshCw,
   Monitor,
-  Smartphone,
-  RotateCw
+  Smartphone
 } from 'lucide-react';
 
 interface SettingsModalProps {
@@ -602,37 +601,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   휴대폰에서 [PC 고정]을 고르면 PC 화면 전체를 축소해서 봅니다. 데이터는 항상 같이 이어집니다.
                 </p>
 
-                {settings.viewMode === 'mobile' && !isPhoneDevice && (
-                  <div className="mt-2">
-                    <label className={labelClass}>모바일 미리보기 방향</label>
-                    <div className="grid grid-cols-2 gap-2">
-                      {(
-                        [
-                          ['portrait', '세로 모드'],
-                          ['landscape', '가로 모드']
-                        ] as const
-                      ).map(([value, label]) => (
-                        <button
-                          key={value}
-                          type="button"
-                          onClick={() =>
-                            onUpdateSettings({
-                              mobileOrientation: value as SiteSettings['mobileOrientation']
-                            })
-                          }
-                          className={`py-2 text-xs font-semibold rounded-lg border transition-all whitespace-nowrap flex items-center justify-center gap-1.5 ${
-                            settings.mobileOrientation === value
-                              ? 'border-blue-600 bg-blue-50 text-blue-700'
-                              : 'border-stone-200 text-stone-600 hover:bg-stone-50'
-                          }`}
-                        >
-                          <RotateCw className="w-3.5 h-3.5 shrink-0" />
-                          <span>{label}</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
               </div>
 
               <div className="pt-2">

@@ -22,7 +22,8 @@ import {
   Maximize2,
   Hand,
   Expand,
-  Minimize2
+  Minimize2,
+  RefreshCw
 } from 'lucide-react';
 
 interface WhiteboardCanvasProps {
@@ -33,7 +34,8 @@ interface WhiteboardCanvasProps {
   /** 대시보드만 꽉 채워 보는 모드 */
   isBoardOnly: boolean;
   onToggleBoardOnly: () => void;
-  onMobileOrientationChange: (orientation: SiteSettings['mobileOrientation']) => void;
+  /** 다른 기기 변경 내용을 수동으로 불러온다 */
+  onRefresh: () => void;
   selectedTokenIds: string[];
   focusTokenId: string | null;
   searchFilter: string;
@@ -145,7 +147,7 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
   isMobile,
   isBoardOnly,
   onToggleBoardOnly,
-  onMobileOrientationChange,
+  onRefresh,
   selectedTokenIds,
   focusTokenId,
   searchFilter,
@@ -932,11 +934,16 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
           >
             <ZoomIn className="w-3.5 h-3.5" />
           </button>
-          {isMobile && <>
-            <div className="w-px h-4 bg-stone-200 mx-0.5" />
-            <button type="button" onClick={() => onMobileOrientationChange('portrait')} aria-pressed={settings.mobileOrientation === 'portrait'} className={`px-2 py-1.5 text-[10px] font-extrabold rounded-lg transition-colors ${settings.mobileOrientation === 'portrait' ? 'bg-blue-600 text-white' : 'text-stone-600 hover:bg-blue-50'}`} title="모바일 세로 보기">세로</button>
-            <button type="button" onClick={() => onMobileOrientationChange('landscape')} aria-pressed={settings.mobileOrientation === 'landscape'} className={`px-2 py-1.5 text-[10px] font-extrabold rounded-lg transition-colors ${settings.mobileOrientation === 'landscape' ? 'bg-blue-600 text-white' : 'text-stone-600 hover:bg-blue-50'}`} title="모바일 가로 보기">가로</button>
-          </>}
+          <div className="w-px h-4 bg-stone-200 mx-0.5" />
+          <button
+            type="button"
+            hidden={isBoardOnly}
+            onClick={onRefresh}
+            className="p-1.5 text-stone-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+            title="다른 기기에서 바뀐 내용 불러오기 (수동 새로고침)"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+          </button>
           <button
             type="button"
             onClick={resetView}

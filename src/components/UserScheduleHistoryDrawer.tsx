@@ -339,7 +339,8 @@ export const UserScheduleHistoryDrawer: React.FC<Props> = ({
   const schedulesForDate = (date: string) => filteredSchedules.filter((item) => date >= item.date && date <= (item.endDate || item.date)).sort(layoutFirst);
   const allSchedulesForDate = (date: string) => allSchedules.filter((item) => date >= item.date && date <= (item.endDate || item.date)).sort(layoutFirst);
   const openSchedule = (schedule: ScheduleItem) => {
-    setDayPopupDate(null); setDayAddMode(null); setSelectedDayDate(null); setContextMenu(null);
+    // 날짜 팝업은 그대로 두고 그 위에 미리보기/상세를 띄운다 (닫으면 원래 팝업으로 복귀)
+    setContextMenu(null);
     if (isLayout(schedule)) {
       setPreviewScheduleId(null);
       const snapshot = snapshots.find((item) => item.id === schedule.snapshotId);

@@ -51,7 +51,7 @@ import { useIsMobile, useIsPhoneDevice } from './hooks/useIsMobile';
 import { Smartphone, Monitor } from 'lucide-react';
 import { listSnapshots, replaceSnapshots } from './utils/snapshots';
 import {
-  createCloudUser, deleteCloudUser, getCloudToken, loadCloud, loginCloud, peekCloud,
+  createCloudUser, deleteCloudUser, getCloudToken, loadCloud, loginCloud,
   resetCloudUserPassword, saveCloud, setCloudToken, updateCloudAccount
 } from './utils/cloud';
 
@@ -113,10 +113,6 @@ function historyReducer(state: HistoryState, action: HistoryAction): HistoryStat
 /** 휴대폰에서 'PC 버전' 을 볼 때 기준이 되는 데스크톱 가로 폭 */
 const DESKTOP_VIEW_WIDTH = 1280;
 
-/** 다른 기기 변경 사항을 확인하는 간격 (조작 중일 때만 동작) */
-const SYNC_INTERVAL_MS = 4000;
-/** 마지막 조작 후 이 시간까지만 '사용 중'으로 보고 확인한다 */
-const ACTIVE_WINDOW_MS = 120000;
 
 const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n));
 const round1 = (n: number) => Number(n.toFixed(1));
@@ -177,22 +173,6 @@ export default function App() {
     settings.mobileOrientation === 'landscape'
       ? { width: 860, height: 430 }
       : { width: 420, height: 860 };
-
-  const handleMobileOrientationChange = useCallback(
-    (orientation: SiteSettings['mobileOrientation']) => {
-      updateSettings({ mobileOrientation: orientation });
-      if (!isPhoneDevice || typeof window === 'undefined') return;
-      const controller = window.screen.orientation as ScreenOrientation & {
-        lock?: (value: 'portrait' | 'landscape') => Promise<void>;
-      };
-      if (typeof controller?.lock === 'function') {
-        void controller.lock(orientation).catch(() => {
-          // 브라우저가 화면 고정을 허용하지 않아도 선택한 모바일 미리보기 방향은 유지한다.
-        });
-      }
-    },
-    [isPhoneDevice, updateSettings]
-  );
 
   /*
    * 실제 휴대폰에서 'PC 버전' 을 고르면 화면이 좁아 레이아웃이 깨진다.
@@ -400,12 +380,6 @@ export default function App() {
     return () => window.clearTimeout(timer);
   }, [boardState, cloudReady, cloudToken, isLoggedIn, settings, snapshots]);
 
-  /*
-   * 다른 기기에서 바뀐 내용을 새로고침 없이 반영한다.
-   * 매번 전체 데이터를 받지 않고 서버의 '마지막 저장 시각'만 확인(peek)한 뒤,
-   * 값이 달라졌을 때만 전체를 내려받아 서버·네트워크 부담을 최소화한다.
-   * 탭이 화면에 보일 때만 확인하므로 백그라운드에서는 요청이 발생하지 않는다.
-   */
   const lastSyncedAtRef = useRef<string | null>(null);
   const pendingSaveRef = useRef(false);
   const boardStateRef = useRef(boardState);
@@ -415,25 +389,16 @@ export default function App() {
   /** 방금 원격 내용을 받아 적용했으면, 그로 인해 생긴 저장은 건너뛴다 */
   const skipNextSaveRef = useRef(false);
 
-  useEffect(() => {
-    if (!isLoggedIn || !cloudToken || !cloudReady) return;
+  /** 다른 기기에서 바뀐 내용을 수동으로 불러온다 (자동 실시간 연동은 사용하지 않음) */
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
-    let cancelled = false;
-
-    const pull = async () => {
-      if (cancelled || document.visibilityState !== 'visible') return;
-      // 내가 방금 바꾼 내용이 아직 저장 중이면 덮어쓰지 않는다
-      if (pendingSaveRef.current) return;
-
-      const head = await peekCloud(cloudToken);
-      if (cancelled || !('data' in head)) return;
-      const remoteAt = head.data.updatedAt;
-      if (!remoteAt || remoteAt === lastSyncedAtRef.current) return;
-
+  const handleManualRefresh = useCallback(async () => {
+    if (!isLoggedIn || !cloudToken || !cloudReady || isRefreshing) return;
+    setIsRefreshing(true);
+    try {
       const result = await loadCloud(cloudToken);
-      if (cancelled || !('data' in result)) return;
+      if (!('data' in result)) return;
       const payload = result.data;
-      lastSyncedAtRef.current = remoteAt;
 
       if (payload.users) {
         setUsers(payload.users);
@@ -449,53 +414,18 @@ export default function App() {
         setSnapshots(payload.snapshots);
       }
       if (payload.settings) {
-        // 화면 모드(PC/모바일)와 미리보기 방향은 기기마다 다르게 쓰는 값이라 동기화하지 않는다
+        // 화면 모드는 기기별 값이라 덮어쓰지 않는다
         setSettings((prev) => {
-          const next = normalizeSiteSettings({
-            ...payload.settings,
-            viewMode: prev.viewMode,
-            mobileOrientation: prev.mobileOrientation
-          });
+          const next = normalizeSiteSettings({ ...payload.settings, viewMode: prev.viewMode });
           saveSiteSettings(next);
           return next;
         });
       }
-    };
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [cloudReady, cloudToken, isLoggedIn, isRefreshing]);
 
-    /*
-     * 사용 중일 때만 자주 확인한다.
-     * - 최근 2분 안에 조작이 있었으면 4초 간격 (거의 즉시 반영되는 느낌)
-     * - 그 뒤로는 확인을 멈춘다 → 탭을 하루 종일 켜둬도 요청이 쌓이지 않는다
-     * - 화면을 다시 보거나 조작하면 즉시 한 번 확인하고 다시 4초 간격으로 돌아간다
-     */
-    let lastActiveAt = Date.now();
-    const markActive = () => {
-      const wasIdle = Date.now() - lastActiveAt > ACTIVE_WINDOW_MS;
-      lastActiveAt = Date.now();
-      if (wasIdle) void pull();
-    };
-
-    const timer = window.setInterval(() => {
-      if (Date.now() - lastActiveAt > ACTIVE_WINDOW_MS) return;
-      void pull();
-    }, SYNC_INTERVAL_MS);
-
-    const onVisible = () => {
-      if (document.visibilityState === 'visible') markActive();
-    };
-
-    document.addEventListener('visibilitychange', onVisible);
-    window.addEventListener('pointerdown', markActive, { passive: true });
-    window.addEventListener('keydown', markActive);
-
-    return () => {
-      cancelled = true;
-      window.clearInterval(timer);
-      document.removeEventListener('visibilitychange', onVisible);
-      window.removeEventListener('pointerdown', markActive);
-      window.removeEventListener('keydown', markActive);
-    };
-  }, [cloudReady, cloudToken, isLoggedIn]);
 
   /*
    * 조용한 로컬 백업.
@@ -1535,7 +1465,7 @@ export default function App() {
           isMobile={isMobile}
           isBoardOnly={isBoardOnly}
           onToggleBoardOnly={() => setIsBoardOnly((prev) => !prev)}
-          onMobileOrientationChange={handleMobileOrientationChange}
+          onRefresh={() => void handleManualRefresh()}
           selectedTokenIds={selectedTokenIds}
           focusTokenId={isAnyModalOpen ? null : focusTokenId}
           searchFilter={searchFilter}
