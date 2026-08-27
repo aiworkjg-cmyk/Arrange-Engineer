@@ -29,6 +29,7 @@ export const ZoneEditorModal: React.FC<ZoneEditorModalProps> = ({
   const [subtitle, setSubtitle] = useState('');
   const [maxCapacity, setMaxCapacity] = useState<number | undefined>(undefined);
   const [selectedTheme, setSelectedTheme] = useState(ZONE_THEMES[0]);
+  const [opacity, setOpacity] = useState(50);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -39,12 +40,14 @@ export const ZoneEditorModal: React.FC<ZoneEditorModalProps> = ({
       setSubtitle(zone.subtitle || '');
       setMaxCapacity(zone.maxCapacity);
       setSelectedTheme(ZONE_THEMES.find((t) => t.header === zone.headerColor) || ZONE_THEMES[0]);
+      setOpacity(zone.opacity ?? 50);
     } else {
       setTitle('');
       setCode('');
       setSubtitle('');
       setMaxCapacity(20);
       setSelectedTheme(ZONE_THEMES[0]);
+      setOpacity(50);
     }
   }, [zone, isOpen]);
 
@@ -76,6 +79,7 @@ export const ZoneEditorModal: React.FC<ZoneEditorModalProps> = ({
       subtitle: subtitle.trim() || undefined,
       maxCapacity: safeCapacity,
       bgColor: selectedTheme.bg,
+      opacity,
       borderColor: selectedTheme.border,
       headerColor: selectedTheme.header
     });
@@ -173,6 +177,25 @@ export const ZoneEditorModal: React.FC<ZoneEditorModalProps> = ({
                   <span>{theme.name.split(' ')[0]}</span>
                 </button>
               ))}
+            </div>
+
+            <div className="mt-3">
+              <label className="flex items-center justify-between text-xs font-semibold text-stone-700 mb-1 whitespace-nowrap">
+                <span>구역 배경 투명도</span>
+                <span className="font-mono text-stone-500">{opacity}%</span>
+              </label>
+              <input
+                type="range"
+                min={0}
+                max={100}
+                step={5}
+                value={opacity}
+                onChange={(e) => setOpacity(Number(e.target.value))}
+                className="w-full accent-blue-600"
+              />
+              <p className="mt-1 text-[11px] text-stone-500">
+                값을 낮추면 배경판의 격자무늬가 구역 안에서도 비쳐 보입니다.
+              </p>
             </div>
           </div>
 

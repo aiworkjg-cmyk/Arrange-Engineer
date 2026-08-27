@@ -71,7 +71,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onOpenLayoutLibrary,
   onResetBoard
 }) => {
-  const [tab, setTab] = useState<TabId>('general');
+  const [tab, setTab] = useState<TabId>('account');
+
+  /** 계정 관리에서 선택해 수정 중인 계정 */
+  const [editingUserId, setEditingUserId] = useState<string | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editLoginId, setEditLoginId] = useState('');
+  const [editPassword, setEditPassword] = useState('');
+  const [editRole, setEditRole] = useState<UserAccount['role']>('작업자');
+  const [editPhone, setEditPhone] = useState('');
+  const [editDept, setEditDept] = useState('');
+  const [editIsAdmin, setEditIsAdmin] = useState(false);
   const [notice, setNotice] = useState<{ type: 'error' | 'success'; text: string } | null>(null);
 
   // 계정 정보 변경
@@ -99,7 +109,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   useEffect(() => {
     if (!isOpen) return;
-    setTab('general');
+    setTab('account');
     setNotice(null);
     setCurrentPw('');
     setNextPw('');
@@ -193,6 +203,67 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     setNotice({ type: 'success', text: '계정 정보가 저장되었습니다.' });
   };
 
+  /** 목록에서 계정을 골라 편집 폼을 채운다 */
+  const startEditUser = (user: UserAccount) => {
+    if (editingUserId === user.id) {
+      setEditingUserId(null);
+      return;
+    }
+    setEditingUserId(user.id);
+    setEditName(user.name);
+    setEditLoginId(user.loginId || '');
+    setEditPassword('');
+    setEditRole(user.role);
+    setEditPhone(user.phone || '');
+    setEditDept(user.department || '');
+    setEditIsAdmin(user.isAdmin === true);
+    setNotice(null);
+  };
+
+  /** 마스터가 다른 계정의 정보를 통째로 수정한다 */
+  const handleSaveEditedUser = async (user: UserAccount) => {
+    const name = editName.trim();
+    const loginId = editLoginId.trim();
+
+    if (!name || !loginId) {
+      setNotice({ type: 'error', text: '이름과 로그인 아이디는 필수입니다.' });
+      return;
+    }
+    if (
+      users.some(
+        (other) => other.id !== user.id && (other.loginId || '').toLowerCase() === loginId.toLowerCase()
+      )
+    ) {
+      setNotice({ type: 'error', text: '이미 사용 중인 아이디입니다.' });
+      return;
+    }
+    if (editPassword && editPassword.trim().length < 3) {
+      setNotice({ type: 'error', text: '비밀번호는 3자 이상이어야 합니다.' });
+      return;
+    }
+
+    const patch: Partial<UserAccount> = {
+      name,
+      loginId,
+      role: editRole,
+      phone: editPhone.trim() || undefined,
+      department: editDept.trim() || undefined
+    };
+    // 마스터 계정의 관리자 권한은 항상 유지된다
+    if (!user.isMaster) patch.isAdmin = editIsAdmin;
+    if (editPassword.trim()) patch.password = editPassword.trim();
+
+    const error = await onUpdateAccount(user.id, patch);
+    if (error) {
+      setNotice({ type: 'error', text: error });
+      return;
+    }
+
+    setEditPassword('');
+    setEditingUserId(null);
+    setNotice({ type: 'success', text: `'${name}' 계정 정보를 저장했습니다.` });
+  };
+
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
     const name = newName.trim();
@@ -258,11 +329,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   };
 
   const tabs: { id: TabId; label: string; icon: React.ReactNode; visible: boolean }[] = [
+    { id: 'account', label: '내 계정', icon: <UserCog className="w-3.5 h-3.5" />, visible: true },
+    { id: 'users', label: '계정 관리', icon: <Users className="w-3.5 h-3.5" />, visible: canManageAccounts },
     { id: 'general', label: '일반', icon: <SlidersHorizontal className="w-3.5 h-3.5" />, visible: true },
     { id: 'board', label: '보드 표시', icon: <Settings className="w-3.5 h-3.5" />, visible: true },
     { id: 'magnet', label: '모형 기본값', icon: <Palette className="w-3.5 h-3.5" />, visible: true },
-    { id: 'account', label: '내 계정', icon: <UserCog className="w-3.5 h-3.5" />, visible: true },
-    { id: 'users', label: '계정 관리', icon: <Users className="w-3.5 h-3.5" />, visible: canManageAccounts },
     { id: 'data', label: '데이터', icon: <Database className="w-3.5 h-3.5" />, visible: true },
     { id: 'reset', label: '대시보드 초기화', icon: <RefreshCw className="w-3.5 h-3.5" />, visible: true }
   ];
@@ -379,6 +450,67 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   className={inputClass}
                   placeholder="예: 시공기사 명단"
                 />
+              </div>
+
+              {/* 배경판 하단 제작 출처 표기 */}
+              <div className="pt-4 border-t border-stone-200 space-y-2.5">
+                <button
+                  type="button"
+                  onClick={() => onUpdateSettings({ showCredit: !settings.showCredit })}
+                  className="w-full flex items-center justify-between gap-3 p-3 rounded-xl border border-stone-200 hover:bg-stone-50 transition-colors text-left"
+                >
+                  <div className="min-w-0">
+                    <div className="text-sm font-semibold text-stone-800 whitespace-nowrap">
+                      제작 출처 표기
+                    </div>
+                    <div className="text-[11px] text-stone-500 truncate">
+                      배경판 맨 아래에 흐리게 한 줄로 표시합니다
+                    </div>
+                  </div>
+                  <span
+                    className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${
+                      settings.showCredit ? 'bg-blue-600' : 'bg-stone-300'
+                    }`}
+                  >
+                    <span
+                      className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all ${
+                        settings.showCredit ? 'left-[22px]' : 'left-0.5'
+                      }`}
+                    />
+                  </span>
+                </button>
+
+                {settings.showCredit && (
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <div>
+                      <label className={labelClass}>표기 이름</label>
+                      <input
+                        type="text"
+                        value={settings.creditOwner}
+                        onChange={(e) => onUpdateSettings({ creditOwner: e.target.value })}
+                        className={inputClass}
+                      />
+                    </div>
+                    <div>
+                      <label className={labelClass}>연도</label>
+                      <input
+                        type="text"
+                        value={settings.creditYear}
+                        onChange={(e) => onUpdateSettings({ creditYear: e.target.value })}
+                        className={inputClass}
+                      />
+                    </div>
+                    <div>
+                      <label className={labelClass}>이메일</label>
+                      <input
+                        type="text"
+                        value={settings.creditEmail}
+                        onChange={(e) => onUpdateSettings({ creditEmail: e.target.value })}
+                        className={inputClass}
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
 
               <button
@@ -726,78 +858,213 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   <span>등록 계정 ({users.length}명)</span>
                 </div>
 
-                <div className="space-y-2 max-h-56 overflow-y-auto custom-scrollbar pr-1">
-                  {users.map((u) => (
-                    <div
-                      key={u.id}
-                      className={`p-2.5 rounded-xl border flex items-center justify-between gap-2 ${
-                        u.id === activeUserId ? 'border-blue-500 bg-blue-50/60' : 'border-stone-200'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <div
-                          style={{ backgroundColor: u.avatarColor || '#3b82f6' }}
-                          className="w-9 h-9 rounded-xl text-white font-bold flex items-center justify-center text-xs shadow-xs shrink-0"
-                        >
-                          {u.isMaster || u.isAdmin ? <ShieldCheck className="w-4 h-4" /> : u.name.slice(0, 2)}
-                        </div>
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-1.5 min-w-0">
-                            <span className="font-bold text-stone-900 text-sm truncate whitespace-nowrap">
-                              {u.name}
-                            </span>
-                            <span className="px-1.5 py-0.5 text-[10px] font-bold rounded bg-stone-100 text-stone-700 whitespace-nowrap shrink-0">
-                              {u.isMaster ? '마스터' : u.isAdmin ? '관리자' : '일반'}
-                            </span>
-                          </div>
-                          <div className="text-[11px] text-stone-500 truncate whitespace-nowrap">
-                            아이디 <span className="font-mono text-stone-700">{u.loginId}</span>
-                            {u.department ? ` · ${u.department}` : ''}
-                          </div>
-                        </div>
-                      </div>
+                <p className="text-[11px] text-stone-500 mb-2">
+                  계정을 누르면 이름·아이디·비밀번호·권한을 모두 수정할 수 있습니다.
+                </p>
 
-                      <div className="flex items-center gap-1 shrink-0">
-                        <button
-                          type="button"
-                          disabled={u.isMaster || u.id === activeUserId}
-                          onClick={async () => {
-                            const pw = window.prompt(`'${u.name}' 계정의 새 비밀번호를 입력하세요.`, '');
-                            if (pw === null) return;
-                            if (pw.trim().length < 3) {
-                              setNotice({ type: 'error', text: '비밀번호는 3자 이상이어야 합니다.' });
-                              return;
-                            }
-                            const error = await onUpdateAccount(u.id, { password: pw.trim() });
-                            if (error) {
-                              setNotice({ type: 'error', text: error });
-                              return;
-                            }
-                            setNotice({ type: 'success', text: `'${u.name}' 비밀번호를 변경했습니다.` });
-                          }}
-                          className="p-1.5 text-stone-500 enabled:hover:text-blue-600 enabled:hover:bg-blue-50 rounded-lg transition-colors disabled:opacity-25 disabled:cursor-not-allowed"
-                          title={u.isMaster ? '마스터 비밀번호는 복구키로 변경합니다' : u.id === activeUserId ? '내 계정 탭에서 변경하세요' : '비밀번호 변경'}
-                        >
-                          <KeyRound className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteUser(u)}
-                          disabled={u.isMaster || u.id === activeUserId}
-                          className="p-1.5 text-stone-500 enabled:hover:text-rose-600 enabled:hover:bg-rose-50 rounded-lg transition-colors disabled:opacity-25 disabled:cursor-not-allowed"
-                          title={
-                            u.isMaster
-                              ? '마스터 계정은 삭제할 수 없습니다'
-                              : u.id === activeUserId
-                              ? '접속 중인 계정은 삭제할 수 없습니다'
-                              : '계정 삭제'
-                          }
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                <div className="space-y-2 max-h-80 overflow-y-auto custom-scrollbar pr-1">
+                  {users.map((u) => {
+                    const isEditing = editingUserId === u.id;
+                    return (
+                      <div
+                        key={u.id}
+                        className={`rounded-xl border transition-colors ${
+                          isEditing
+                            ? 'border-blue-500 ring-1 ring-blue-400 bg-blue-50/40'
+                            : u.id === activeUserId
+                            ? 'border-blue-300 bg-blue-50/40'
+                            : 'border-stone-200'
+                        }`}
+                      >
+                        <div className="p-2.5 flex items-center justify-between gap-2">
+                          <button
+                            type="button"
+                            onClick={() => startEditUser(u)}
+                            className="flex items-center gap-2.5 min-w-0 flex-1 text-left"
+                            title="클릭하여 계정 정보 수정"
+                          >
+                            <div
+                              style={{ backgroundColor: u.avatarColor || '#3b82f6' }}
+                              className="w-9 h-9 rounded-xl text-white font-bold flex items-center justify-center text-xs shadow-xs shrink-0"
+                            >
+                              {u.isMaster || u.isAdmin ? (
+                                <ShieldCheck className="w-4 h-4" />
+                              ) : (
+                                u.name.slice(0, 2)
+                              )}
+                            </div>
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                <span className="font-bold text-stone-900 text-sm truncate whitespace-nowrap">
+                                  {u.name}
+                                </span>
+                                <span className="px-1.5 py-0.5 text-[10px] font-bold rounded bg-stone-100 text-stone-700 whitespace-nowrap shrink-0">
+                                  {u.isMaster ? '마스터' : u.isAdmin ? '관리자' : '일반'}
+                                </span>
+                              </div>
+                              <div className="text-[11px] text-stone-500 truncate whitespace-nowrap">
+                                아이디 <span className="font-mono text-stone-700">{u.loginId}</span>
+                                {u.department ? ` · ${u.department}` : ''}
+                              </div>
+                            </div>
+                          </button>
+
+                          <div className="flex items-center gap-1 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => startEditUser(u)}
+                              className={`p-1.5 rounded-lg transition-colors ${
+                                isEditing
+                                  ? 'bg-blue-600 text-white'
+                                  : 'text-stone-500 hover:text-blue-600 hover:bg-blue-50'
+                              }`}
+                              title="계정 정보 수정"
+                            >
+                              <UserCog className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteUser(u)}
+                              disabled={u.isMaster || u.id === activeUserId}
+                              className="p-1.5 text-stone-500 enabled:hover:text-rose-600 enabled:hover:bg-rose-50 rounded-lg transition-colors disabled:opacity-25 disabled:cursor-not-allowed"
+                              title={
+                                u.isMaster
+                                  ? '마스터 계정은 삭제할 수 없습니다'
+                                  : u.id === activeUserId
+                                  ? '접속 중인 계정은 삭제할 수 없습니다'
+                                  : '계정 삭제'
+                              }
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+
+                        {isEditing && (
+                          <div className="px-2.5 pb-3 pt-1 border-t border-blue-200/70 space-y-2.5">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                              <div>
+                                <label className={labelClass}>이름</label>
+                                <input
+                                  type="text"
+                                  value={editName}
+                                  onChange={(e) => setEditName(e.target.value)}
+                                  className={inputClass}
+                                />
+                              </div>
+                              <div>
+                                <label className={labelClass}>로그인 아이디</label>
+                                <input
+                                  type="text"
+                                  value={editLoginId}
+                                  onChange={(e) => setEditLoginId(e.target.value)}
+                                  className={inputClass}
+                                />
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                              <div>
+                                <label className={labelClass}>새 비밀번호</label>
+                                <input
+                                  type="text"
+                                  value={editPassword}
+                                  onChange={(e) => setEditPassword(e.target.value)}
+                                  autoComplete="off"
+                                  placeholder="변경할 때만 입력"
+                                  className={inputClass}
+                                />
+                              </div>
+                              <div>
+                                <label className={labelClass}>직책 / 역할</label>
+                                <select
+                                  value={editRole}
+                                  onChange={(e) => setEditRole(e.target.value as UserAccount['role'])}
+                                  className={`${inputClass} bg-white`}
+                                >
+                                  <option value="작업자">작업자</option>
+                                  <option value="시공반장">시공반장</option>
+                                  <option value="현장소장">현장소장</option>
+                                  <option value="대표">대표</option>
+                                  <option value="게스트">게스트</option>
+                                </select>
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                              <div>
+                                <label className={labelClass}>연락처</label>
+                                <input
+                                  type="text"
+                                  value={editPhone}
+                                  onChange={(e) => setEditPhone(e.target.value)}
+                                  placeholder="010-0000-0000"
+                                  className={inputClass}
+                                />
+                              </div>
+                              <div>
+                                <label className={labelClass}>소속 부서 / 조</label>
+                                <input
+                                  type="text"
+                                  value={editDept}
+                                  onChange={(e) => setEditDept(e.target.value)}
+                                  className={inputClass}
+                                />
+                              </div>
+                            </div>
+
+                            <button
+                              type="button"
+                              disabled={u.isMaster}
+                              onClick={() => setEditIsAdmin((prev) => !prev)}
+                              className="w-full flex items-center justify-between gap-3 p-2.5 rounded-lg border border-stone-200 bg-white enabled:hover:bg-stone-50 transition-colors text-left disabled:opacity-60"
+                            >
+                              <div className="min-w-0">
+                                <div className="text-xs font-bold text-stone-800 whitespace-nowrap">
+                                  관리자 권한
+                                </div>
+                                <div className="text-[10px] text-stone-500 truncate">
+                                  {u.isMaster
+                                    ? '마스터 계정은 항상 모든 권한을 가집니다'
+                                    : '계정 추가·삭제 및 설정 관리 권한'}
+                                </div>
+                              </div>
+                              <span
+                                className={`relative w-10 h-5.5 rounded-full transition-colors shrink-0 ${
+                                  u.isMaster || editIsAdmin ? 'bg-blue-600' : 'bg-stone-300'
+                                }`}
+                                style={{ height: '1.375rem' }}
+                              >
+                                <span
+                                  className={`absolute top-0.5 w-4.5 h-4.5 rounded-full bg-white shadow transition-all ${
+                                    u.isMaster || editIsAdmin ? 'left-[1.25rem]' : 'left-0.5'
+                                  }`}
+                                  style={{ width: '1.125rem', height: '1.125rem' }}
+                                />
+                              </span>
+                            </button>
+
+                            <div className="flex gap-2 pt-1">
+                              <button
+                                type="button"
+                                onClick={() => setEditingUserId(null)}
+                                className="flex-1 py-2 text-xs font-bold text-stone-600 bg-stone-100 hover:bg-stone-200 rounded-lg transition-colors whitespace-nowrap"
+                              >
+                                취소
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => void handleSaveEditedUser(u)}
+                                className="flex-1 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors whitespace-nowrap"
+                              >
+                                이 계정 정보 저장
+                              </button>
+                            </div>
+                          </div>
+                        )}
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
 

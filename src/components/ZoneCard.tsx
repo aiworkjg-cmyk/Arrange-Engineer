@@ -52,7 +52,8 @@ export const ZoneCardComponent: React.FC<ZoneCardProps> = ({
         top: `${zone.y}%`,
         width: `${zone.width}%`,
         height: `${zone.height}%`,
-        backgroundColor: zone.bgColor || 'rgba(255, 255, 255, 0.6)',
+        // 배경판 격자가 비쳐 보이도록 구역 배경에 투명도를 적용한다 (기본 50%)
+        backgroundColor: 'transparent',
         borderColor: zone.borderColor || '#cbd5e1'
       }}
       className={`absolute rounded-2xl border-2 border-dashed pointer-events-none group/zone shadow-xs backdrop-blur-[1px] ${
@@ -67,6 +68,16 @@ export const ZoneCardComponent: React.FC<ZoneCardProps> = ({
           onEditZone(zone);
         }}
         title="빈 공간 더블클릭 시 구역 설정"
+      />
+
+      {/* 구역 배경 (투명도 적용 - 배경판 격자가 비쳐 보인다) */}
+      <div
+        aria-hidden
+        className="absolute inset-0 rounded-2xl pointer-events-none"
+        style={{
+          backgroundColor: zone.bgColor || 'rgba(255, 255, 255, 0.6)',
+          opacity: (zone.opacity ?? 50) / 100
+        }}
       />
 
       {/* 구역 헤더 (= 구역 이동 손잡이) */}

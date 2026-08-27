@@ -35,6 +35,7 @@ async function request<T>(body: unknown, token?: string | null, headers?: Record
 }
 
 export const loginCloud = (loginId: string, password: string) => request<CloudPayload>({ action: 'login', loginId, password });
+export const peekCloud = (token: string) => request<{ updatedAt: string | null }>({ action: 'peek' }, token);
 export const loadCloud = (token: string) => request<CloudPayload>({ action: 'load' }, token);
 export const saveCloud = (token: string, state: BoardState, snapshots: BoardSnapshot[], settings: SiteSettings) => request<{ ok: true; updatedAt: string }>({ action: 'save', state, snapshots, settings }, token);
 export const updateCloudAccount = (token: string, currentPassword: string, patch: Partial<UserAccount>) => request<{ user: UserAccount; users: UserAccount[] }>({ action: 'updateAccount', currentPassword, patch }, token);

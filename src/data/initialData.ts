@@ -14,11 +14,14 @@ import {
 export const DEFAULT_DASHBOARD_TITLE = '시공기사 배치 대시보드';
 
 /** 이전 버전에서 쓰던 제목 - 저장된 데이터를 새 제목으로 옮길 때 사용 */
+/** 예전 기본값으로 들어가 있던 회사명 - 저장된 설정에서 자동으로 지운다 */
+export const LEGACY_COMPANY_NAMES = ['(주)유로테크'];
+
 export const LEGACY_DASHBOARD_TITLES = ['현장 시공 & 라인 배치 화이트보드'];
 
 export const DEFAULT_SITE_SETTINGS: SiteSettings = {
   dashboardTitle: DEFAULT_DASHBOARD_TITLE,
-  companyName: '(주)유로테크',
+  companyName: '',
   rosterTitle: '시공기사 명단',
   showGrid: true,
   showZoneCapacity: true,
@@ -34,6 +37,10 @@ export const DEFAULT_SITE_SETTINGS: SiteSettings = {
   boardWidth: 1600,
   boardHeight: 1000,
   boardBackground: '#f8fafc',
+  showCredit: true,
+  creditOwner: 'OUSQUE',
+  creditEmail: 'aiworkjg@gmail.com',
+  creditYear: '2026',
   viewMode: 'auto',
   mobileOrientation: 'portrait'
 };

@@ -69,6 +69,8 @@ export interface BoardZone {
   bgColor: string;
   borderColor: string;
   headerColor: string;
+  /** 구역 배경 투명도 0~100 (기본 50). 낮을수록 배경판 격자가 비쳐 보인다 */
+  opacity?: number;
   maxCapacity?: number;
   description?: string;
 }
@@ -164,6 +166,11 @@ export interface SiteSettings {
   boardHeight: number;
   /** 보드 배경색 */
   boardBackground: string;
+  /** 배경판 하단 제작 출처 표기 */
+  showCredit: boolean;
+  creditOwner: string;
+  creditEmail: string;
+  creditYear: string;
   viewMode: 'auto' | 'desktop' | 'mobile';
   /** PC에서 모바일 모드로 미리볼 때의 방향 */
   mobileOrientation: 'portrait' | 'landscape';

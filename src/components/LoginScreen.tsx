@@ -20,14 +20,32 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  /*
+   * 주의: <form> 의 submit 을 쓰지 않는다.
+   * 브라우저(크롬/사파리)의 비밀번호 관리자는 "비밀번호 필드가 있는 폼이 제출될 때"
+   * 저장 여부를 묻는 팝업이나 '유출된 비밀번호' 경고를 띄운다.
+   * 사이트 오류가 아니라 브라우저 기능이므로, 폼 제출 대신 버튼 클릭으로 처리해 팝업을 막는다.
+   */
+  const handleSubmit = async () => {
+    if (submitting) return;
     setError(null);
+
+    if (!loginId.trim() || !password) {
+      setError('아이디와 비밀번호를 입력해주세요.');
+      return;
+    }
 
     setSubmitting(true);
     const loginError = await onLogin(loginId.trim(), password);
     setSubmitting(false);
     if (loginError) setError(loginError);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      void handleSubmit();
+    }
   };
 
   return (
@@ -51,7 +69,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
           )}
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-3">
+        <div className="p-6 space-y-3">
           <div>
             <label className="block text-xs font-semibold text-stone-700 mb-1 whitespace-nowrap">
               아이디
@@ -61,9 +79,10 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
               value={loginId}
               onChange={(e) => setLoginId(e.target.value)}
               autoFocus
-              autoComplete="username"
+              autoComplete="off"
+              name="board-account"
+              onKeyDown={handleKeyDown}
               className="w-full px-3 py-2.5 text-sm rounded-lg border border-stone-300 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-              required
             />
           </div>
 
@@ -76,9 +95,10 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                 type={showPassword ? 'text' : 'password'}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                autoComplete="current-password"
+                autoComplete="off"
+                name="board-key"
+                onKeyDown={handleKeyDown}
                 className="w-full px-3 py-2.5 pr-10 text-sm rounded-lg border border-stone-300 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                required
               />
               <button
                 type="button"
@@ -99,14 +119,15 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
           )}
 
           <button
-            type="submit"
+            type="button"
+            onClick={() => void handleSubmit()}
             disabled={submitting}
             className="w-full py-2.5 mt-1 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-sm transition-all flex items-center justify-center gap-2 whitespace-nowrap"
           >
             <LogIn className="w-4 h-4 shrink-0" />
             <span>{submitting ? '확인 중...' : '로그인'}</span>
           </button>
-        </form>
+        </div>
       </div>
     </div>
   );

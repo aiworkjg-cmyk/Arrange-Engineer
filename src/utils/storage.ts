@@ -16,7 +16,8 @@ import {
   DEFAULT_USER_PASSWORD,
   DEFAULT_SITE_SETTINGS,
   DEFAULT_DASHBOARD_TITLE,
-  LEGACY_DASHBOARD_TITLES
+  LEGACY_DASHBOARD_TITLES,
+  LEGACY_COMPANY_NAMES
 } from '../data/initialData';
 import { resolveTokenCollisions } from './layout';
 

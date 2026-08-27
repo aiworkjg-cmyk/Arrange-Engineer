@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { CalendarDays, Check, CircleCheck, CirclePlus, LocateFixed, Pencil, Phone, Search, Trash2, UserPlus, Users, X } from 'lucide-react';
 import {
   InstallerProfile,
@@ -65,6 +65,36 @@ export const RosterSheetModal: React.FC<RosterSheetModalProps> = ({
     const existingIds = new Set(installers.map((installer) => installer.id));
     setSelectedIds((current) => current.filter((id) => existingIds.has(id)));
   }, [installers]);
+
+  /** PC 더블클릭 / 모바일 두 번 터치를 같은 동작으로 묶는다 */
+  const lastRowTapRef = useRef(0);
+  const runDoubleTap = (event: React.PointerEvent, run: () => void) => {
+    if (event.pointerType === 'mouse') return;
+    const now = Date.now();
+    if (now - lastRowTapRef.current < 320) {
+      lastRowTapRef.current = 0;
+      run();
+    } else {
+      lastRowTapRef.current = now;
+    }
+  };
+
+  const rowTapProps = (installer: InstallerProfile) => ({
+    onDoubleClick: (event: React.MouseEvent) => {
+      const target = event.target as HTMLElement;
+      if (!target.closest('button, a, input, select')) onEditInstaller(installer);
+    },
+    onPointerUp: (event: React.PointerEvent) => {
+      const target = event.target as HTMLElement;
+      if (target.closest('button, a, input, select')) return;
+      runDoubleTap(event, () => onEditInstaller(installer));
+    }
+  });
+
+  const nameTapProps = (installer: InstallerProfile) => ({
+    onDoubleClick: () => onEditInstaller(installer),
+    onPointerUp: (event: React.PointerEvent) => runDoubleTap(event, () => onEditInstaller(installer))
+  });
 
   const filteredInstallers = useMemo(() => {
     const query = searchTerm.trim().toLowerCase();
@@ -156,10 +186,10 @@ export const RosterSheetModal: React.FC<RosterSheetModalProps> = ({
                   const checked = selectedSet.has(installer.id);
                   const status = STATUS_OPTIONS.find((item) => item.id === installer.status) || STATUS_OPTIONS[0];
                   const magnet = matchingMagnet(installer);
-                  return <tr key={installer.id} onDoubleClick={(event) => { const target = event.target as HTMLElement; if (!target.closest('button, a, input, select')) onEditInstaller(installer); }} title="기능 버튼이 없는 행 영역을 더블클릭하여 상세 설정" className={`transition-colors ${checked ? 'bg-emerald-50' : 'hover:bg-emerald-50/40'}`}>
+                  return <tr key={installer.id} {...rowTapProps(installer)} title="행을 더블클릭(모바일은 두 번 터치)하여 상세 설정" className={`transition-colors ${checked ? 'bg-emerald-50' : 'hover:bg-emerald-50/40'}`}>
                     <td className="py-2.5 px-3 text-center"><button type="button" onClick={() => toggleInstaller(installer.id)} className={`w-5 h-5 rounded border flex items-center justify-center mx-auto ${checked ? 'bg-emerald-600 border-emerald-600 text-white' : 'bg-white border-stone-300'}`}>{checked && <Check className="w-3.5 h-3.5" />}</button></td>
                     <td className="py-2.5 px-3 text-center text-stone-400 font-mono">{index + 1}</td>
-                    <td className="py-2.5 px-3 font-bold text-stone-900"><button type="button" onDoubleClick={() => onEditInstaller(installer)} className="hover:text-emerald-700 cursor-default" title="더블클릭하여 상세 설정">{installer.name}</button></td>
+                    <td className="py-2.5 px-3 font-bold text-stone-900"><button type="button" {...nameTapProps(installer)} className="hover:text-emerald-700 cursor-default" title="더블클릭(모바일은 두 번 터치)하여 상세 설정">{installer.name}</button></td>
                     <td className="py-2.5 px-3 text-stone-700 font-bold">{installer.role || '미설정'}</td>
                     <td className="py-2.5 px-3 text-stone-600 font-mono">{installer.phone ? <a href={`tel:${installer.phone}`} className="text-blue-600 hover:underline inline-flex items-center gap-1"><Phone className="w-3 h-3" />{installer.phone}</a> : '-'}</td>
                     <td className="py-2.5 px-3 text-stone-600">{installer.email || '-'}</td>

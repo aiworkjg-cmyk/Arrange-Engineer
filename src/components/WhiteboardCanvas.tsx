@@ -182,6 +182,8 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
   const [viewport, setViewport] = useState({ width: 0, height: 0 });
   const [zoom, setZoom] = useState(1); // 화면 맞춤 배율에 곱해지는 사용자 배율
   const [pan, setPan] = useState({ x: 0, y: 0 }); // 보드 좌상단의 화면 위치(px)
+  const panRef = useRef(pan);
+  panRef.current = pan;
 
   const fitScale = getFitScale(viewport.width, viewport.height, boardWidth, boardHeight);
   const scale = fitScale * zoom;
@@ -316,19 +318,23 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
    * 배경 더블클릭 처리.
    * 구역 안쪽 빈 공간이면 그 구역 설정을, 구역 밖 배경이면 보드 설정을 연다.
    */
-  const handleCanvasDoubleClick = (e: React.MouseEvent) => {
+  const openSettingsAtPoint = (clientX: number, clientY: number) => {
     const boardRect = boardRef.current?.getBoundingClientRect();
     if (!boardRect || boardRect.width === 0 || boardRect.height === 0) return;
 
-    const x = ((e.clientX - boardRect.left) / boardRect.width) * 100;
-    const y = ((e.clientY - boardRect.top) / boardRect.height) * 100;
+    const x = ((clientX - boardRect.left) / boardRect.width) * 100;
+    const y = ((clientY - boardRect.top) / boardRect.height) * 100;
 
-    const hitZone = zones
+    const hitZone = latestRef.current.zones
       .filter((z) => x >= z.x && x <= z.x + z.width && y >= z.y && y <= z.y + z.height)
       .sort((a, b) => a.width * a.height - b.width * b.height)[0];
 
     if (hitZone) onEditZone(hitZone);
     else onOpenBoardSettings();
+  };
+
+  const handleCanvasDoubleClick = (e: React.MouseEvent) => {
+    openSettingsAtPoint(e.clientX, e.clientY);
   };
 
   const resetView = useCallback(() => {
@@ -342,6 +348,7 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
   const [preview, setPreview] = useState<DragPreview | null>(null);
   const [isDragging, setIsDragging] = useState(false);
 
+  const lastTapRef = useRef(0);
   const panSessionRef = useRef<PanSession | null>(null);
   const [isPanning, setIsPanning] = useState(false);
 
@@ -714,6 +721,21 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
         if (pinch.pointers.size < 2) {
           pinch.startDistance = 0;
           setIsPinching(false);
+
+          // 손가락 하나가 남아 있으면 그 손가락으로 바로 화면 이동을 이어간다
+          const [remainingId] = Array.from(pinch.pointers.keys()) as number[];
+          const remaining = remainingId === undefined ? null : pinch.pointers.get(remainingId);
+          if (remaining) {
+            panSessionRef.current = {
+              pointerId: remainingId,
+              originClientX: remaining.x,
+              originClientY: remaining.y,
+              startPanX: panRef.current.x,
+              startPanY: panRef.current.y,
+              moved: true
+            };
+            setIsPanning(true);
+          }
         }
         return;
       }
@@ -721,8 +743,17 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
       const session = panSessionRef.current;
       if (!session || e.pointerId !== session.pointerId) return;
 
-      // 움직이지 않았으면 단순 탭 → 선택 해제
-      if (!session.moved && e.type !== 'pointercancel') onSelectToken(null);
+      if (!session.moved && e.type !== 'pointercancel') {
+        // 두 번 연속 탭하면 PC 의 더블클릭과 같은 동작(구역/배경 설정)을 실행한다
+        const now = Date.now();
+        if (e.pointerType !== 'mouse' && now - lastTapRef.current < 320) {
+          lastTapRef.current = 0;
+          openSettingsAtPoint(e.clientX, e.clientY);
+        } else {
+          lastTapRef.current = now;
+          onSelectToken(null);
+        }
+      }
 
       panSessionRef.current = null;
       setIsPanning(false);
@@ -847,7 +878,7 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
   const activeZoneId = preview?.kind === 'zone' ? preview.id : null;
 
   const actionButtonClass = isMobile
-    ? 'px-2.5 py-2 text-[11px] font-bold rounded-xl transition-all flex items-center gap-1 whitespace-nowrap shrink-0'
+    ? 'px-1.5 py-1.5 text-[10px] font-bold rounded-lg transition-all flex items-center gap-0.5 whitespace-nowrap shrink-0'
     : 'px-3 py-1.5 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 whitespace-nowrap shrink-0';
 
   return (
@@ -959,10 +990,12 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
             settings.showGrid ? 'whiteboard-surface' : 'whiteboard-surface-plain'
           } rounded-2xl border-[10px] border-stone-300 shadow-2xl overflow-hidden`}
         >
-          <div className="absolute top-2 left-4 text-xs font-bold text-stone-400/80 tracking-widest uppercase select-none pointer-events-none flex items-center gap-2 whitespace-nowrap">
-            <span className="w-2 h-2 rounded-full bg-stone-300 inline-block" />
-            <span>{settings.companyName || 'FIELD DISPATCH BOARD'}</span>
-          </div>
+          {settings.companyName && (
+            <div className="absolute top-2 left-4 text-xs font-bold text-stone-400/80 tracking-widest uppercase select-none pointer-events-none flex items-center gap-2 whitespace-nowrap">
+              <span className="w-2 h-2 rounded-full bg-stone-300 inline-block" />
+              <span>{settings.companyName}</span>
+            </div>
+          )}
 
           {/* 1. 구역 */}
           {zones.map((zone) => {
@@ -1026,6 +1059,16 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
               />
             );
           })}
+          {settings.showCredit && (
+            <div
+              className="absolute bottom-0 left-0 right-0 px-4 py-1.5 text-center pointer-events-none select-none"
+              style={{ opacity: 0.32 }}
+            >
+              <span className="text-[13px] text-stone-500 whitespace-nowrap">
+                Copyright © {settings.creditYear} {settings.creditOwner} All rights reserved. · {settings.creditEmail}
+              </span>
+            </div>
+          )}
         </div>
 
         {/* PC 드래그 선택 박스 */}
@@ -1038,14 +1081,18 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
       </div>
 
       {/* 하단 퀵 액션 */}
-      <div hidden={isBoardOnly} className="absolute bottom-2 sm:bottom-4 left-1/2 -translate-x-1/2 z-30 flex items-center gap-1.5 sm:gap-2 bg-white/95 backdrop-blur-md px-2 sm:px-4 py-1.5 sm:py-2 rounded-2xl border border-stone-200 shadow-xl max-w-[calc(100%-1rem)] overflow-x-auto custom-scrollbar">
+      <div hidden={isBoardOnly} className={`absolute bottom-2 sm:bottom-4 left-1/2 -translate-x-1/2 z-30 flex items-center bg-white/95 backdrop-blur-md rounded-2xl border border-stone-200 shadow-xl ${
+          isMobile
+            ? 'gap-1 px-1.5 py-1.5 max-w-[calc(100%-0.5rem)]'
+            : 'gap-2 px-4 py-2 max-w-[calc(100%-1rem)] overflow-x-auto custom-scrollbar'
+        }`}>
         <button
           type="button"
           onClick={onAddNewMagnet}
           className={`${actionButtonClass} text-white bg-blue-600 hover:bg-blue-700 shadow-xs`}
           title="새 모형 추가"
         >
-          <Plus className="w-4 h-4 shrink-0" />
+          <Plus className={`shrink-0 ${isMobile ? 'w-3.5 h-3.5' : 'w-4 h-4'}`} />
           <span>{isMobile ? '모형' : '새 모형 추가'}</span>
         </button>
 
@@ -1055,7 +1102,7 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
           className={`${actionButtonClass} text-white bg-amber-600 hover:bg-amber-700 shadow-xs`}
           title="새 구역 추가"
         >
-          <Plus className="w-4 h-4 shrink-0" />
+          <Plus className={`shrink-0 ${isMobile ? 'w-3.5 h-3.5' : 'w-4 h-4'}`} />
           <span>{isMobile ? '구역' : '구역 추가'}</span>
         </button>
 
@@ -1065,8 +1112,8 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
           className={`${actionButtonClass} text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200`}
           title="모형 목록 선택 및 속성 일괄 수정"
         >
-          <ListChecks className="w-4 h-4 shrink-0" />
-          <span>모형 관리</span>
+          <ListChecks className={`shrink-0 ${isMobile ? 'w-3.5 h-3.5' : 'w-4 h-4'}`} />
+          <span>{isMobile ? '모형관리' : '모형 관리'}</span>
         </button>
 
         <button
@@ -1075,11 +1122,11 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
           className={`${actionButtonClass} text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-200`}
           title="전체 구역 생성·삭제 및 일괄 관리"
         >
-          <LayoutList className="w-4 h-4 shrink-0" />
-          <span>구역 관리</span>
+          <LayoutList className={`shrink-0 ${isMobile ? 'w-3.5 h-3.5' : 'w-4 h-4'}`} />
+          <span>{isMobile ? '구역관리' : '구역 관리'}</span>
         </button>
 
-        <div className="h-6 w-px bg-stone-300 mx-0.5 sm:mx-1 shrink-0" />
+        <div className={`w-px bg-stone-300 shrink-0 ${isMobile ? 'h-5 mx-0' : 'h-6 mx-1'}`} />
 
         <button
           type="button"
@@ -1087,7 +1134,7 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
           className={`${actionButtonClass} text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200`}
           title="모형과 독립된 시공기사 원장 관리"
         >
-          <Users className="w-4 h-4 shrink-0" />
+          <Users className={`shrink-0 ${isMobile ? 'w-3.5 h-3.5' : 'w-4 h-4'}`} />
           <span>{isMobile ? '기사' : '시공기사 명단'}</span>
         </button>
 

@@ -51,7 +51,7 @@ import { useIsMobile } from './hooks/useIsMobile';
 import { Smartphone, Monitor } from 'lucide-react';
 import { listSnapshots, replaceSnapshots } from './utils/snapshots';
 import {
-  createCloudUser, deleteCloudUser, getCloudToken, loadCloud, loginCloud,
+  createCloudUser, deleteCloudUser, getCloudToken, loadCloud, loginCloud, peekCloud,
   resetCloudUserPassword, saveCloud, setCloudToken, updateCloudAccount
 } from './utils/cloud';
 
@@ -186,6 +186,25 @@ export default function App() {
     [isNarrowWindow, updateSettings]
   );
 
+  /*
+   * 실제 휴대폰에서 'PC 버전' 을 고르면 화면이 좁아 레이아웃이 깨진다.
+   * 이때는 viewport 폭을 데스크톱 기준으로 고정해, 폰에서도 PC 화면을 축소해 보고
+   * 손가락으로 확대·이동할 수 있게 한다. (모바일/자동 모드에서는 원래대로 되돌린다)
+   */
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const meta = document.querySelector('meta[name="viewport"]');
+    if (!meta) return;
+
+    const forceDesktop = settings.viewMode === 'desktop' && isNarrowWindow;
+    meta.setAttribute(
+      'content',
+      forceDesktop
+        ? 'width=1280, initial-scale=0.3, minimum-scale=0.2, maximum-scale=3, user-scalable=yes'
+        : 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no'
+    );
+  }, [settings.viewMode, isNarrowWindow]);
+
   // 3. 보드 상태 (히스토리 포함)
   const [history, dispatch] = useReducer(historyReducer, undefined, () => ({
     present: getSessionUserId() ? getBoardStateForUser(getSessionUserId()!) : createGuestBoard(),
@@ -210,6 +229,23 @@ export default function App() {
       boardMetricsRef.current = metrics;
     }
   }, []);
+
+  /**
+   * 로그인하지 않은 상태에서 관리·편집 기능을 누르면
+   * 안내창을 거치지 않고 바로 로그인 창을 띄운다.
+   * (확대/축소 같은 보기 전용 기능은 그대로 사용 가능)
+   */
+  const requireLogin = useCallback(
+    <T extends (...args: never[]) => unknown>(fn: T) =>
+      ((...args: Parameters<T>) => {
+        if (!isLoggedIn) {
+          setIsLoginOpen(true);
+          return undefined;
+        }
+        return fn(...args);
+      }) as unknown as T,
+    [isLoggedIn]
+  );
 
   // 4. 선택 / 검색
   const [selectedTokenIds, setSelectedTokenIds] = useState<string[]>([]);
@@ -323,11 +359,78 @@ export default function App() {
   // 보드·캘린더·배치표·설정을 한 묶음으로 계정별 저장한다.
   useEffect(() => {
     if (!isLoggedIn || !cloudToken || !cloudReady) return;
+    pendingSaveRef.current = true;
     const timer = window.setTimeout(() => {
-      void saveCloud(cloudToken, boardState, snapshots, settings);
+      void saveCloud(cloudToken, boardState, snapshots, settings).then((result) => {
+        pendingSaveRef.current = false;
+        if ('data' in result && result.data.updatedAt) {
+          lastSyncedAtRef.current = result.data.updatedAt;
+        }
+      });
     }, 1800);
     return () => window.clearTimeout(timer);
   }, [boardState, cloudReady, cloudToken, isLoggedIn, settings, snapshots]);
+
+  /*
+   * 다른 기기에서 바뀐 내용을 새로고침 없이 반영한다.
+   * 매번 전체 데이터를 받지 않고 서버의 '마지막 저장 시각'만 확인(peek)한 뒤,
+   * 값이 달라졌을 때만 전체를 내려받아 서버·네트워크 부담을 최소화한다.
+   * 탭이 화면에 보일 때만 확인하므로 백그라운드에서는 요청이 발생하지 않는다.
+   */
+  const lastSyncedAtRef = useRef<string | null>(null);
+  const pendingSaveRef = useRef(false);
+
+  useEffect(() => {
+    if (!isLoggedIn || !cloudToken || !cloudReady) return;
+
+    let cancelled = false;
+
+    const pull = async () => {
+      if (cancelled || document.visibilityState !== 'visible') return;
+      // 내가 방금 바꾼 내용이 아직 저장 중이면 덮어쓰지 않는다
+      if (pendingSaveRef.current) return;
+
+      const head = await peekCloud(cloudToken);
+      if (cancelled || !('data' in head)) return;
+      const remoteAt = head.data.updatedAt;
+      if (!remoteAt || remoteAt === lastSyncedAtRef.current) return;
+
+      const result = await loadCloud(cloudToken);
+      if (cancelled || !('data' in result)) return;
+      const payload = result.data;
+      lastSyncedAtRef.current = remoteAt;
+
+      if (payload.users) {
+        setUsers(payload.users);
+        saveAllUsers(payload.users);
+      }
+      if (payload.state) {
+        dispatch({ type: 'load', state: payload.state });
+        saveBoardStateForUser(payload.user.id, payload.state);
+      }
+      if (payload.snapshots) {
+        replaceSnapshots(payload.user.id, payload.snapshots);
+        setSnapshots(payload.snapshots);
+      }
+      if (payload.settings) {
+        const nextSettings = normalizeSiteSettings(payload.settings);
+        setSettings(nextSettings);
+        saveSiteSettings(nextSettings);
+      }
+    };
+
+    const timer = window.setInterval(() => void pull(), 15000);
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') void pull();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [cloudReady, cloudToken, isLoggedIn]);
 
   // 대시보드 제목을 브라우저 탭 제목에도 반영
   useEffect(() => {
@@ -950,6 +1053,7 @@ export default function App() {
           y: zoneData.y ?? 20 + Math.floor(prevState.zones.length / 3) * 30,
           width: zoneData.width ?? 25,
           height: zoneData.height ?? 35,
+          opacity: zoneData.opacity ?? 50,
           bgColor: zoneData.bgColor || 'rgba(239, 246, 255, 0.7)',
           borderColor: zoneData.borderColor || '#93c5fd',
           headerColor: zoneData.headerColor || '#2563eb'
@@ -1306,22 +1410,21 @@ export default function App() {
         isMobile={isMobile}
         viewMode={settings.viewMode}
         onToggleMobilePreview={() =>
-          updateSettings({ viewMode: settings.viewMode === 'mobile' ? 'auto' : 'mobile' })
+          updateSettings({ viewMode: isMobile ? 'desktop' : 'mobile' })
         }
-        onEnterBoardOnly={() => setIsBoardOnly(true)}
         userPendingSchedulesCount={userPendingSchedulesCount}
         searchFilter={searchFilter}
         canUndo={canUndo}
         canRedo={canRedo}
         onSearchChange={setSearchFilter}
-        onUndo={() => dispatch({ type: 'undo' })}
-        onRedo={() => dispatch({ type: 'redo' })}
-        onOpenLayoutLibrary={() => setIsLayoutLibraryOpen(true)}
-        onOpenScheduleHistory={() => {
+        onUndo={requireLogin(() => dispatch({ type: 'undo' }))}
+        onRedo={requireLogin(() => dispatch({ type: 'redo' }))}
+        onOpenLayoutLibrary={requireLogin(() => setIsLayoutLibraryOpen(true))}
+        onOpenScheduleHistory={requireLogin(() => {
           setScheduleFocusTokenId(null);
           setIsScheduleDrawerOpen(true);
-        }}
-        onOpenSettings={() => setIsSettingsOpen(true)}
+        })}
+        onOpenSettings={requireLogin(() => setIsSettingsOpen(true))}
         onOpenLogin={() => setIsLoginOpen(true)}
       />
       )}
@@ -1338,43 +1441,43 @@ export default function App() {
           selectedTokenIds={selectedTokenIds}
           focusTokenId={isAnyModalOpen ? null : focusTokenId}
           searchFilter={searchFilter}
-          onUpdateTokenPositions={handleUpdateTokenPositions}
-          onUpdateTokenSize={handleUpdateTokenSize}
-          onUpdateZoneRect={handleUpdateZoneRect}
+          onUpdateTokenPositions={requireLogin(handleUpdateTokenPositions)}
+          onUpdateTokenSize={requireLogin(handleUpdateTokenSize)}
+          onUpdateZoneRect={requireLogin(handleUpdateZoneRect)}
           onBoardMetricsChange={handleBoardMetricsChange}
           onSelectToken={handleSelectToken}
           onSelectTokenIds={handleSelectTokenIds}
-          onEditToken={(tok) => {
+          onEditToken={requireLogin((tok: MagnetToken) => {
             setEditingToken(tok);
             setIsMagnetEditorOpen(true);
-          }}
-          onEditSelectedTokens={() => setIsMagnetManagerOpen(true)}
-          onDeleteToken={handleDeleteToken}
-          onViewSchedule={(tok) => {
+          })}
+          onEditSelectedTokens={requireLogin(() => setIsMagnetManagerOpen(true))}
+          onDeleteToken={requireLogin(handleDeleteToken)}
+          onViewSchedule={requireLogin((tok: MagnetToken) => {
             setSelectedTokenIds([tok.id]);
             setSelectionAnchorTokenId(tok.id);
             setScheduleFocusTokenId(tok.id);
             setIsScheduleDrawerOpen(true);
-          }}
-          onQuickStatusChange={handleQuickStatusChange}
-          onEditZone={(z) => {
+          })}
+          onQuickStatusChange={requireLogin(handleQuickStatusChange)}
+          onEditZone={requireLogin((z: BoardZone) => {
             setEditingZone(z);
             setIsZoneEditorOpen(true);
-          }}
-          onDeleteZone={handleDeleteZone}
-          onAutoArrangeZone={handleAutoArrangeZone}
-          onOpenRosterSheet={() => setIsRosterModalOpen(true)}
-          onAddNewMagnet={() => {
+          })}
+          onDeleteZone={requireLogin(handleDeleteZone)}
+          onAutoArrangeZone={requireLogin(handleAutoArrangeZone)}
+          onOpenRosterSheet={requireLogin(() => setIsRosterModalOpen(true))}
+          onAddNewMagnet={requireLogin(() => {
             setEditingToken(null);
             setIsMagnetEditorOpen(true);
-          }}
-          onAddNewZone={() => {
+          })}
+          onAddNewZone={requireLogin(() => {
             setEditingZone(null);
             setIsZoneEditorOpen(true);
-          }}
-          onOpenMagnetManager={() => setIsMagnetManagerOpen(true)}
-          onOpenZoneManager={() => setIsZoneManagerOpen(true)}
-          onOpenBoardSettings={() => setIsBoardSettingsOpen(true)}
+          })}
+          onOpenMagnetManager={requireLogin(() => setIsMagnetManagerOpen(true))}
+          onOpenZoneManager={requireLogin(() => setIsZoneManagerOpen(true))}
+          onOpenBoardSettings={requireLogin(() => setIsBoardSettingsOpen(true))}
           onFocusHandled={() => setFocusTokenId(null)}
         />
       </main>

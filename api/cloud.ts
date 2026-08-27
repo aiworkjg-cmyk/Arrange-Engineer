@@ -132,6 +132,11 @@ export default async function handler(req: any, res: any) {
     const user = users.find((item) => item.id === userId);
     if (!user) return send(res, 401, { message: '로그인이 만료되었습니다. 다시 로그인해 주세요.' });
 
+    if (action === 'peek') {
+      // 전체 데이터를 읽지 않고 갱신 시각만 돌려준다 (실시간 동기화용, 매우 가벼움)
+      const updatedAt = await redis!.get<string>(`${DATA_PREFIX}${user.id}:v`);
+      return send(res, 200, { updatedAt: updatedAt || null });
+    }
     if (action === 'load') {
       const data = (await redis!.get<AccountData>(`${DATA_PREFIX}${user.id}`)) || {};
       return send(res, 200, { configured: true, user: publicUser(user), users: users.map(publicUser), ...data });
@@ -140,6 +145,8 @@ export default async function handler(req: any, res: any) {
       const data: AccountData = { state: body.state, snapshots: Array.isArray(body.snapshots) ? body.snapshots : [], settings: body.settings, updatedAt: new Date().toISOString() };
       if (Buffer.byteLength(JSON.stringify(data), 'utf8') > MAX_SAVE_BYTES) return send(res, 413, { message: '저장 데이터가 8MB를 초과했습니다.' });
       await redis!.set(`${DATA_PREFIX}${user.id}`, data);
+      // 다른 기기가 가볍게 확인할 수 있도록 '마지막 저장 시각'만 담은 작은 키를 함께 둔다
+      await redis!.set(`${DATA_PREFIX}${user.id}:v`, data.updatedAt);
       return send(res, 200, { ok: true, updatedAt: data.updatedAt });
     }
     if (action === 'updateAccount') {

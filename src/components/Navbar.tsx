@@ -12,8 +12,7 @@ import {
   LogIn,
   X,
   Smartphone,
-  Monitor,
-  Expand
+  Monitor
 } from 'lucide-react';
 
 interface NavbarProps {
@@ -25,7 +24,6 @@ interface NavbarProps {
   /** 사용자가 직접 고른 화면 모드 (auto / desktop / mobile) */
   viewMode: 'auto' | 'desktop' | 'mobile';
   onToggleMobilePreview: () => void;
-  onEnterBoardOnly: () => void;
   userPendingSchedulesCount: number;
   searchFilter: string;
   canUndo: boolean;
@@ -47,7 +45,6 @@ export const Navbar: React.FC<NavbarProps> = ({
   isMobile,
   viewMode,
   onToggleMobilePreview,
-  onEnterBoardOnly,
   userPendingSchedulesCount,
   searchFilter,
   canUndo,
@@ -62,7 +59,9 @@ export const Navbar: React.FC<NavbarProps> = ({
 }) => {
   const [isSearchOpen, setIsSearchOpen] = useState(false);
 
-  const isMobilePreview = viewMode === 'mobile';
+  /* 현재 '보이고 있는' 레이아웃 기준으로 전환 버튼을 표시한다.
+     (실제 휴대폰에서도 PC 버전으로 바꿀 수 있어야 하므로 viewMode 가 아닌 isMobile 을 본다) */
+  const isMobilePreview = isMobile;
 
   /** PC 에서 모바일 화면을 그대로 확인해 볼 수 있는 전환 버튼 */
   const mobilePreviewButton = (compact: boolean) => (
@@ -84,21 +83,6 @@ export const Navbar: React.FC<NavbarProps> = ({
         <Smartphone className="w-3.5 h-3.5 shrink-0" />
       )}
       <span>{isMobilePreview ? 'PC 버전' : '모바일 버전'}</span>
-    </button>
-  );
-
-  /** 메뉴를 감추고 대시보드만 꽉 채워 보는 버튼 (PC·모바일 공통) */
-  const boardOnlyButton = (compact: boolean) => (
-    <button
-      type="button"
-      onClick={onEnterBoardOnly}
-      className={`flex items-center gap-1.5 rounded-xl border border-stone-200 bg-stone-100 text-stone-700 hover:bg-stone-200 transition-colors shrink-0 whitespace-nowrap font-bold ${
-        compact ? 'px-2.5 py-1.5 text-[11px]' : 'px-2.5 sm:px-3 py-1.5 text-xs'
-      }`}
-      title="메뉴를 감추고 대시보드만 크게 보기"
-    >
-      <Expand className="w-3.5 h-3.5 shrink-0" />
-      <span>{compact ? '전체보기' : '대시보드만 보기'}</span>
     </button>
   );
 
@@ -225,8 +209,6 @@ export const Navbar: React.FC<NavbarProps> = ({
         <div className="px-2 pb-2 flex items-center gap-1.5 overflow-x-auto custom-scrollbar">
           {undoRedo}
 
-          {boardOnlyButton(true)}
-
           {mobilePreviewButton(true)}
 
           <button
@@ -304,8 +286,6 @@ export const Navbar: React.FC<NavbarProps> = ({
         {/* 우측 액션 */}
         <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
           {undoRedo}
-
-          {boardOnlyButton(false)}
 
           {mobilePreviewButton(false)}
 
